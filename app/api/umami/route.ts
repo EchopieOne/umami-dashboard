@@ -165,9 +165,16 @@ function analyzeAlarmTypes(events: any[] | undefined) {
 }
 
 // 获取国家分布前5名
-function getTopCountries(countries: any[] | undefined) {
+function getTopCountries(countries: any) {
+  console.log('getTopCountries input:', JSON.stringify(countries));
+  
+  if (!countries) {
+    console.error('getTopCountries: countries is null/undefined');
+    return [];
+  }
+  
   if (!Array.isArray(countries)) {
-    console.error('getTopCountries: countries is not an array', countries);
+    console.error('getTopCountries: countries is not an array', typeof countries, countries);
     return [];
   }
   
@@ -181,6 +188,7 @@ function getTopCountries(countries: any[] | undefined) {
       value: c.y || 0,
     }));
   
+  console.log('getTopCountries output:', JSON.stringify(sorted));
   return sorted;
 }
 
@@ -417,7 +425,11 @@ export async function GET(request: Request) {
           annual: clickAnnual.data?.length || 0,
           lifetime: clickLifetime.data?.length || 0,
         },
-        countries: getTopCountries(countries.data || []),
+        countries: getTopCountries(countries),
+        debug: {
+          countriesType: typeof countries,
+          countriesData: countries,
+        }
       },
       
       range: {
