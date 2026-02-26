@@ -4,6 +4,12 @@ const UMAMI_URL = process.env.UMAMI_URL || 'https://ubm.echopie.com';
 const USERNAME = process.env.UMAMI_USERNAME || 'admin';
 const PASSWORD = process.env.UMAMI_PASSWORD || 'umami';
 
+console.log('Environment check:', {
+  UMAMI_URL,
+  USERNAME: USERNAME ? '***' : 'empty',
+  PASSWORD: PASSWORD ? '***' : 'empty',
+});
+
 let cachedToken: string | null = null;
 let cachedWebsiteId: string | null = null;
 
@@ -18,8 +24,8 @@ async function login() {
   });
   const data = await res.json();
   if (!data.token) {
-    console.error('Login failed:', data);
-    throw new Error('Login failed: ' + (data.error || 'No token received'));
+    console.error('Login failed:', JSON.stringify(data, null, 2));
+    throw new Error('Login failed: ' + (data.error?.message || JSON.stringify(data)));
   }
   cachedToken = data.token;
   return cachedToken;
