@@ -286,6 +286,11 @@ export async function GET(request: Request) {
       stats,
       prevStats,
       countries,
+      
+      // 30天趋势
+      newUsers30d,
+      activeUsers30d,
+      purchases30d,
     ] = await Promise.all([
       getEvents(startAt, endAt, 'app.launch'),
       getEvents(startAt, endAt, 'new.user'),
@@ -321,6 +326,11 @@ export async function GET(request: Request) {
       getStats(startAt, endAt),
       getStats(prevStartAt, prevEndAt),
       getCountries(startAt, endAt),
+      
+      // 30天趋势数据
+      getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'new.user'),
+      getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'user.daily.active'),
+      getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'setting.purchase.success'),
     ]);
     
     // 计算闹钟类型（从前面的所有事件中筛选）
@@ -394,6 +404,11 @@ export async function GET(request: Request) {
         appLaunches: getDailyData(appLaunch.data || [], startAt, endAt),
         alarmsAdded: getDailyData(addAlarm.data || [], startAt, endAt),
         purchases: getDailyData(purchaseSuccess.data || [], startAt, endAt),
+        trend30d: {
+          newUsers: getDailyData(newUsers30d.data || [], now - 30 * 24 * 60 * 60 * 1000, now),
+          activeUsers: getDailyData(activeUsers30d.data || [], now - 30 * 24 * 60 * 60 * 1000, now),
+          purchases: getDailyData(purchases30d.data || [], now - 24 * 60 * 60 * 1000, now),
+        }
       },
       
       breakdown: {

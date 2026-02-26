@@ -103,6 +103,11 @@ interface DataResponse {
     appLaunches: ChartData[];
     alarmsAdded: ChartData[];
     purchases: ChartData[];
+    trend30d: {
+      newUsers: ChartData[];
+      activeUsers: ChartData[];
+      purchases: ChartData[];
+    };
   };
   breakdown: BreakdownData;
   range: RangeData;
@@ -424,6 +429,43 @@ export default function Dashboard() {
                       activeDot={{ r: 6 }}
                     />
                   </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 30天趋势柱状图 */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">30天趋势对比</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading || !data ? (
+              <Skeleton className="h-80" />
+            ) : (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.charts.trend30d.newUsers.map((item, index) => ({
+                    date: item.date,
+                    新用户: data.charts.trend30d.newUsers[index]?.count || 0,
+                    活跃用户: data.charts.trend30d.activeUsers[index]?.count || 0,
+                    购买: data.charts.trend30d.purchases[index]?.count || 0,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(v) => new Date(v).toLocaleDateString('zh-CN', {month: 'short', day: 'numeric'})}
+                      style={{ fontSize: 11 }}
+                    />
+                    <YAxis style={{ fontSize: 12 }} />
+                    <Tooltip 
+                      labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')}
+                    />
+                    <Bar dataKey="新用户" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="活跃用户" fill="#10b981" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="购买" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             )}
