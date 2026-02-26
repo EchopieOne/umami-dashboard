@@ -77,6 +77,22 @@ async function getStats(startAt: number, endAt: number) {
   return res.json();
 }
 
+async function getCountries(startAt: number, endAt: number) {
+  const token = await getToken();
+  const websiteId = await getWebsiteId();
+  const params = new URLSearchParams({
+    startAt: startAt.toString(),
+    endAt: endAt.toString(),
+    type: 'country',
+  });
+  
+  const res = await fetch(
+    `${UMAMI_URL}/api/websites/${websiteId}/metrics?${params}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return res.json();
+}
+
 function formatDate(timestamp: number) {
   return new Date(timestamp).toISOString().split('T')[0];
 }
@@ -146,6 +162,26 @@ function analyzeAlarmTypes(events: any[] | undefined) {
   return Object.entries(types)
     .filter(([_, count]) => count > 0)
     .map(([name, value]) => ({ name, value }));
+}
+
+// 获取国家分布前5名
+function getTopCountries(countries: any[] | undefined) {
+  if (!Array.isArray(countries)) {
+    console.error('getTopCountries: countries is not an array', countries);
+    return [];
+  }
+  
+  // 按访问量排序并取前5
+  const sorted = countries
+    .filter((c: any) => c && c.x && c.y)
+    .sort((a: any, b: any) => (b.y || 0) - (a.y || 0))
+    .slice(0, 5)
+    .map((c: any) => ({
+      name: c.x || 'Unknown',
+      value: c.y || 0,
+    }));
+  
+  return sorted;
 }
 
 // 分析购买漏斗
@@ -249,6 +285,7 @@ export async function GET(request: Request) {
       
       stats,
       prevStats,
+      countries,
     ] = await Promise.all([
       getEvents(startAt, endAt, 'app.launch'),
       getEvents(startAt, endAt, 'new.user'),
@@ -283,6 +320,7 @@ export async function GET(request: Request) {
       
       getStats(startAt, endAt),
       getStats(prevStartAt, prevEndAt),
+      getCountries(startAt, endAt),
     ]);
     
     // 计算闹钟类型（从前面的所有事件中筛选）
@@ -364,6 +402,7 @@ export async function GET(request: Request) {
           annual: clickAnnual.data?.length || 0,
           lifetime: clickLifetime.data?.length || 0,
         },
+        countries: getTopCountries(countries.data || []),
       },
       
       range: {

@@ -14,6 +14,9 @@ import {
   Funnel,
   FunnelChart,
   LabelList,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts';
 import { 
   Calendar, 
@@ -28,7 +31,8 @@ import {
   Star,
   Cloud,
   Smartphone,
-  AlertCircle
+  AlertCircle,
+  Globe
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Button } from '@/components/ui/button';
@@ -81,6 +85,7 @@ interface ChartData {
 interface BreakdownData {
   alarmTypes: { name: string; value: number }[];
   purchaseClicks: { annual: number; lifetime: number };
+  countries: { name: string; value: number }[];
 }
 
 interface RangeData {
@@ -420,6 +425,60 @@ export default function Dashboard() {
                     />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* 国家分布饼图 */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Globe className="w-5 h-5" />
+              用户国家分布 (Top 5)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading || !data ? (
+              <Skeleton className="h-64" />
+            ) : data.breakdown.countries.length > 0 ? (
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={data.breakdown.countries}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={5}
+                      dataKey="value"
+                      nameKey="name"
+                    >
+                      {data.breakdown.countries.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-4 mt-4 flex-wrap">
+                  {data.breakdown.countries.map((item, index) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                      />
+                      <span className="text-sm text-gray-600">
+                        {item.name}: {item.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-gray-400">
+                暂无国家数据
               </div>
             )}
           </CardContent>
