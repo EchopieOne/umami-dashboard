@@ -254,7 +254,7 @@ export default function Dashboard() {
         <Card className="mb-6">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Bell className="w-5 h-5" />>
+              <Bell className="w-5 h-5" />
               核心功能：闹钟管理
             </CardTitle>
           </CardHeader>
