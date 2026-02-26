@@ -254,7 +254,7 @@ export default function Dashboard() {
         <Card className="mb-6">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Bell className="w-5 h-5" />
+              <Bell className="w-5 h-5" />>
               核心功能：闹钟管理
             </CardTitle>
           </CardHeader>
@@ -306,7 +306,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <ShoppingCart className="w-5 h-5" /
+                <ShoppingCart className="w-5 h-5" />
                 购买转化漏斗
               </CardTitle>
             </CardHeader>
@@ -354,7 +354,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
-                <GraduationCap className="w-5 h-5" /
+                <GraduationCap className="w-5 h-5" />
                 新用户引导
               </CardTitle>
             </CardHeader>
