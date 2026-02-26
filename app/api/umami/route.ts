@@ -17,6 +17,10 @@ async function login() {
     body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
   });
   const data = await res.json();
+  if (!data.token) {
+    console.error('Login failed:', data);
+    throw new Error('Login failed: ' + (data.error || 'No token received'));
+  }
   cachedToken = data.token;
   return cachedToken;
 }
@@ -33,6 +37,10 @@ async function getWebsiteId() {
     headers: { Authorization: `Bearer ${token}` },
   });
   const data = await res.json();
+  if (!data.data || !data.data[0]) {
+    console.error('No websites found:', data);
+    throw new Error('No websites found in Umami account');
+  }
   cachedWebsiteId = data.data[0].id;
   return cachedWebsiteId;
 }
