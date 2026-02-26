@@ -472,6 +472,46 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* 30天趋势柱状图 */}
+        <Card className="mb-6">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <TrendingUp className="w-5 h-5" />
+              30天趋势 (新用户 / 活跃用户 / 购买)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loading || !data ? (
+              <Skeleton className="h-80" />
+            ) : (
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data.charts.trend30d.newUsers.map((item, idx) => ({
+                    date: item.date,
+                    newUsers: item.count,
+                    activeUsers: data.charts.trend30d.activeUsers[idx]?.count || 0,
+                    purchases: data.charts.trend30d.purchases[idx]?.count || 0,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis 
+                      dataKey="date" 
+                      tickFormatter={(v) => new Date(v).toLocaleDateString('zh-CN', {month: 'short', day: 'numeric'})}
+                      style={{ fontSize: 12 }}
+                    />
+                    <YAxis style={{ fontSize: 12 }} />
+                    <Tooltip 
+                      labelFormatter={(v) => new Date(v).toLocaleDateString('zh-CN')}
+                    />
+                    <Bar dataKey="newUsers" name="新用户" fill="#3b82f6" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="activeUsers" name="活跃用户" fill="#10b981" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey="purchases" name="购买" fill="#f59e0b" radius={[2, 2, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* 国家分布饼图 */}
         <Card className="mb-6">
           <CardHeader className="pb-3">
