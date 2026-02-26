@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-const UMAMI_URL = process.env.UMAMI_URL || '';
+const UMAMI_URL = process.env.UMAMI_URL || 'https://ubm.echopie.com';
 const USERNAME = process.env.UMAMI_USERNAME || '';
 const PASSWORD = process.env.UMAMI_PASSWORD || '';
 
@@ -8,6 +8,9 @@ let cachedToken: string | null = null;
 let cachedWebsiteId: string | null = null;
 
 async function login() {
+  if (!USERNAME || !PASSWORD) {
+    throw new Error('UMAMI_USERNAME and UMAMI_PASSWORD environment variables are required');
+  }
   const res = await fetch(`${UMAMI_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -351,8 +354,9 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     console.error('API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch Umami data';
     return NextResponse.json(
-      { error: 'Failed to fetch Umami data' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
