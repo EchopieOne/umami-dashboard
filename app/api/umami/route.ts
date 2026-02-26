@@ -81,7 +81,12 @@ function formatDate(timestamp: number) {
   return new Date(timestamp).toISOString().split('T')[0];
 }
 
-function getDailyData(events: any[], startAt: number, endAt: number) {
+function getDailyData(events: any[] | undefined, startAt: number, endAt: number) {
+  if (!Array.isArray(events)) {
+    console.error('getDailyData: events is not an array', events);
+    return [];
+  }
+  
   const daily: Record<string, number> = {};
   const start = new Date(startAt);
   const end = new Date(endAt);
@@ -91,9 +96,11 @@ function getDailyData(events: any[], startAt: number, endAt: number) {
   }
   
   events.forEach((event) => {
-    const date = formatDate(event.createdAt);
-    if (daily[date] !== undefined) {
-      daily[date]++;
+    if (event && event.createdAt) {
+      const date = formatDate(event.createdAt);
+      if (daily[date] !== undefined) {
+        daily[date]++;
+      }
     }
   });
   
@@ -104,7 +111,12 @@ function getDailyData(events: any[], startAt: number, endAt: number) {
 }
 
 // 分析闹钟类型分布
-function analyzeAlarmTypes(events: any[]) {
+function analyzeAlarmTypes(events: any[] | undefined) {
+  if (!Array.isArray(events)) {
+    console.error('analyzeAlarmTypes: events is not an array', events);
+    return [];
+  }
+  
   const types: Record<string, number> = {
     '一次性': 0,
     '每天': 0,
@@ -118,6 +130,7 @@ function analyzeAlarmTypes(events: any[]) {
   };
   
   events.forEach((e) => {
+    if (!e || !e.eventName) return;
     const eventName = e.eventName || '';
     if (eventName.includes('once')) types['一次性']++;
     else if (eventName.includes('everyday')) types['每天']++;
