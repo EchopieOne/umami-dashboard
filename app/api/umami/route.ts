@@ -1,14 +1,8 @@
 import { NextResponse } from 'next/server';
 
-const UMAMI_URL = process.env.UMAMI_URL || 'https://ubm.echopie.com';
-const USERNAME = process.env.UMAMI_USERNAME || 'admin';
-const PASSWORD = process.env.UMAMI_PASSWORD || 'umami';
-
-console.log('Environment check:', {
-  UMAMI_URL,
-  USERNAME: USERNAME ? '***' : 'empty',
-  PASSWORD: PASSWORD ? '***' : 'empty',
-});
+const UMAMI_URL = (process.env.UMAMI_URL || 'https://ubm.echopie.com').trim();
+const USERNAME = (process.env.UMAMI_USERNAME || 'admin').trim();
+const PASSWORD = (process.env.UMAMI_PASSWORD || 'umami').trim();
 
 let cachedToken: string | null = null;
 let cachedWebsiteId: string | null = null;
