@@ -107,16 +107,10 @@ async function getRevenueCatRevenue(startAt: number, endAt: number) {
 async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   if (!hasRevenueCatCredentials()) return null;
   
-  // Try events endpoint instead of transactions
-  let url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/events?limit=100`;
+  // Try customers endpoint to get subscriber data with purchases
+  const url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers?limit=100`;
   
-  if (startAt && endAt) {
-    const startDate = new Date(startAt).toISOString();
-    const endDate = new Date(endAt).toISOString();
-    url += `&after=${encodeURIComponent(startDate)}&before=${encodeURIComponent(endDate)}`;
-  }
-  
-  console.log('Fetching RevenueCat events:', url);
+  console.log('Fetching RevenueCat customers:', url);
   
   const res = await fetch(url, { 
     headers: getRevenueCatHeaders(), 
@@ -125,43 +119,51 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   
   if (!res.ok) {
     const errorText = await res.text();
-    console.error('RevenueCat events error:', res.status, errorText);
+    console.error('RevenueCat customers error:', res.status, errorText);
     return null;
   }
   
   const data = await res.json();
-  console.log(`Retrieved ${data.items?.length || 0} events`);
+  console.log(`Retrieved ${data.items?.length || 0} customers`);
   
   return data;
 }
 
-// Parse transaction details from events
-function parseRevenueCatTransactions(eventsData: any) {
-  if (!eventsData?.items || !Array.isArray(eventsData.items)) {
+// Parse transaction details from customers' entitlements
+function parseRevenueCatTransactions(customersData: any) {
+  if (!customersData?.items || !Array.isArray(customersData.items)) {
     return [];
   }
 
-  // Filter for purchase-related events
-  const purchaseEvents = eventsData.items.filter((event: any) => {
-    const type = event.type || '';
-    return ['INITIAL_PURCHASE', 'RENEWAL', 'CANCELLATION', 'REFUND'].includes(type);
+  const transactions: any[] = [];
+  
+  customersData.items.forEach((customer: any) => {
+    if (customer.entitlements) {
+      Object.entries(customer.entitlements).forEach(([key, entitlement]: [string, any]) => {
+        if (entitlement?.purchase_date) {
+          transactions.push({
+            id: `${customer.id}_${key}`,
+            type: entitlement.will_renew ? 'RENEWAL' : 'INITIAL_PURCHASE',
+            store: entitlement.store || 'unknown',
+            price: 0, // Price not available in customer data
+            currency: 'USD',
+            productId: key,
+            subscriberId: customer.id,
+            country: customer.attributes?.['$ipCountry']?.value,
+            appUserId: customer.id,
+            isTrial: entitlement.is_trial || false,
+            cancellationReason: entitlement.unsubscribe_detected_at ? 'USER_CANCELLED' : undefined,
+            createdAt: entitlement.purchase_date,
+            customAttributes: customer.attributes || {},
+          });
+        }
+      });
+    }
   });
 
-  return purchaseEvents.map((event: any) => ({
-    id: event.id,
-    type: event.type,
-    store: event.store,
-    price: event.price?.amount || 0,
-    currency: event.price?.currency || 'USD',
-    productId: event.product_id,
-    subscriberId: event.subscriber?.id,
-    country: event.subscriber?.country,
-    appUserId: event.subscriber?.app_user_id,
-    isTrial: event.is_trial_conversion || false,
-    cancellationReason: event.cancellation_reason,
-    createdAt: event.created_at,
-    customAttributes: event.subscriber?.custom_attributes || {},
-  }));
+  return transactions.sort((a, b) => 
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
 }
 
 function getMetricValueById(metrics: unknown, id: string): number | undefined {

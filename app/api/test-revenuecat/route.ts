@@ -123,7 +123,38 @@ export async function GET() {
     results.tests.events = { error: String(error) };
   }
 
-  // Test 4: Transactions API (backup)
+  // Test 4: Customers API (for subscriber data)
+  try {
+    const customersRes = await fetch(
+      `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers?limit=10`,
+      { headers, cache: 'no-store' }
+    );
+
+    results.tests.customers = {
+      status: customersRes.status,
+      ok: customersRes.ok,
+    };
+
+    if (customersRes.ok) {
+      const data = await customersRes.json();
+      results.tests.customers.data = {
+        keys: Object.keys(data),
+        hasItems: Array.isArray(data.items),
+        itemsCount: data.items?.length || 0,
+        sampleCustomer: data.items?.[0] ? {
+          id: data.items[0].id,
+          hasEntitlements: !!data.items[0].entitlements,
+          entitlementCount: Object.keys(data.items[0].entitlements || {}).length,
+        } : null,
+      };
+    } else {
+      results.tests.customers.error = await customersRes.text();
+    }
+  } catch (error) {
+    results.tests.customers = { error: String(error) };
+  }
+
+  // Test 5: Transactions API (backup)
   try {
     const txRes = await fetch(
       `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions`,
