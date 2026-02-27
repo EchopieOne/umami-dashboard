@@ -126,27 +126,40 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   const data = await res.json();
   console.log(`Retrieved ${data.items?.length || 0} customers`);
   
-  // Fetch detailed subscription info for each customer
-  const customersWithSubs = await Promise.all(
+  // Fetch detailed subscription and purchase info for each customer
+  const customersWithDetails = await Promise.all(
     (data.items || []).slice(0, 50).map(async (customer: any) => {
       try {
+        // Get subscriptions
         const subRes = await fetch(
           `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customer.id)}/subscriptions`,
           { headers: getRevenueCatHeaders(), cache: 'no-store' }
         );
         
+        // Get purchases (non-subscription)
+        const purchaseRes = await fetch(
+          `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customer.id)}/purchases`,
+          { headers: getRevenueCatHeaders(), cache: 'no-store' }
+        );
+        
+        const result: any = { ...customer };
+        
         if (subRes.ok) {
-          const subs = await subRes.json();
-          return { ...customer, subscriptions: subs };
+          result.subscriptions = await subRes.json();
         }
-        return customer;
+        
+        if (purchaseRes.ok) {
+          result.purchases = await purchaseRes.json();
+        }
+        
+        return result;
       } catch (e) {
         return customer;
       }
     })
   );
   
-  return { ...data, items: customersWithSubs };
+  return { ...data, items: customersWithDetails };
 }
 
 // Parse transaction details from customers data
@@ -158,13 +171,13 @@ function parseRevenueCatTransactions(customersData: any) {
   const transactions: any[] = [];
   
   customersData.items.forEach((customer: any) => {
-    // Extract from subscriptions if available
+    // Extract from subscriptions
     if (customer.subscriptions?.items && customer.subscriptions.items.length > 0) {
       customer.subscriptions.items.forEach((sub: any) => {
         transactions.push({
           id: sub.id || `${customer.id}_${sub.product_identifier || 'unknown'}`,
           type: sub.auto_renewal_status === 'will_not_renew' ? 'CANCELLATION' : 
-                sub.is_trial ? 'TRIAL' : 'INITIAL_PURCHASE',
+                sub.is_trial ? 'TRIAL' : 'SUBSCRIPTION',
           store: sub.store || 'app_store',
           price: sub.price?.amount || sub.current_amount?.amount || 0,
           currency: sub.price?.currency || sub.current_amount?.currency || 'USD',
@@ -176,6 +189,28 @@ function parseRevenueCatTransactions(customersData: any) {
           cancellationReason: sub.auto_renewal_status === 'will_not_renew' ? 'USER_CANCELLED' : undefined,
           createdAt: sub.current_period_starts_at || sub.starts_at,
           expiresAt: sub.current_period_ends_at || sub.ends_at,
+          customAttributes: customer.attributes || {},
+        });
+      });
+    }
+    
+    // Extract from purchases (non-subscription/lifetime)
+    if (customer.purchases?.items && customer.purchases.items.length > 0) {
+      customer.purchases.items.forEach((purchase: any) => {
+        transactions.push({
+          id: purchase.id || `${customer.id}_${purchase.product_identifier || 'unknown'}`,
+          type: purchase.type || 'INITIAL_PURCHASE',
+          store: purchase.store || 'app_store',
+          price: purchase.price?.amount || 0,
+          currency: purchase.price?.currency || 'USD',
+          productId: purchase.product_identifier || 'unknown',
+          subscriberId: purchase.customer_id || customer.id,
+          country: purchase.country || customer.last_seen_country,
+          appUserId: customer.id,
+          isTrial: false,
+          cancellationReason: undefined,
+          createdAt: purchase.purchased_at || purchase.created_at,
+          expiresAt: null, // Lifetime purchases don't expire
           customAttributes: customer.attributes || {},
         });
       });

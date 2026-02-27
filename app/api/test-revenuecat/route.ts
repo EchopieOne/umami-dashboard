@@ -166,6 +166,7 @@ export async function GET() {
       const customerId = customersData.items?.[0]?.id;
       
       if (customerId) {
+        // Get subscriptions
         const subsRes = await fetch(
           `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customerId)}/subscriptions`,
           { headers, cache: 'no-store' }
@@ -182,14 +183,46 @@ export async function GET() {
             keys: Object.keys(data),
             hasItems: Array.isArray(data.items),
             itemsCount: data.items?.length || 0,
+            sampleSubscription: data.items?.[0] ? {
+              id: data.items[0].id,
+              product_identifier: data.items[0].product_identifier,
+              type: data.items[0].type,
+              is_trial: data.items[0].is_trial,
+              price: data.items[0].price,
+              current_amount: data.items[0].current_amount,
+              auto_renewal_status: data.items[0].auto_renewal_status,
+            } : null,
           };
         } else {
           results.tests.subscriptions.error = await subsRes.text();
+        }
+
+        // Get purchases (non-subscription)
+        const purchasesRes = await fetch(
+          `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customerId)}/purchases`,
+          { headers, cache: 'no-store' }
+        );
+
+        results.tests.purchases = {
+          status: purchasesRes.status,
+          ok: purchasesRes.ok,
+        };
+
+        if (purchasesRes.ok) {
+          const data = await purchasesRes.json();
+          results.tests.purchases.data = {
+            keys: Object.keys(data),
+            hasItems: Array.isArray(data.items),
+            itemsCount: data.items?.length || 0,
+          };
+        } else {
+          results.tests.purchases.error = await purchasesRes.text();
         }
       }
     }
   } catch (error) {
     results.tests.subscriptions = { error: String(error) };
+    results.tests.purchases = { error: String(error) };
   }
 
   // Test 6: Transactions API (backup)
