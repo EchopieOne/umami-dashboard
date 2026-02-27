@@ -107,8 +107,8 @@ async function getRevenueCatRevenue(startAt: number, endAt: number) {
 async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   if (!hasRevenueCatCredentials()) return null;
   
-  // Build URL with optional date filtering
-  let url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions?limit=100`;
+  // Try events endpoint instead of transactions
+  let url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/events?limit=100`;
   
   if (startAt && endAt) {
     const startDate = new Date(startAt).toISOString();
@@ -116,7 +116,7 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
     url += `&after=${encodeURIComponent(startDate)}&before=${encodeURIComponent(endDate)}`;
   }
   
-  console.log('Fetching RevenueCat transactions:', url);
+  console.log('Fetching RevenueCat events:', url);
   
   const res = await fetch(url, { 
     headers: getRevenueCatHeaders(), 
@@ -125,37 +125,42 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   
   if (!res.ok) {
     const errorText = await res.text();
-    console.error('RevenueCat transactions error:', res.status, errorText);
+    console.error('RevenueCat events error:', res.status, errorText);
     return null;
   }
   
   const data = await res.json();
-  console.log(`Retrieved ${data.items?.length || 0} transactions`);
+  console.log(`Retrieved ${data.items?.length || 0} events`);
   
   return data;
 }
 
-// Parse transaction details for display
-function parseRevenueCatTransactions(transactionsData: any) {
-  if (!transactionsData?.items || !Array.isArray(transactionsData.items)) {
+// Parse transaction details from events
+function parseRevenueCatTransactions(eventsData: any) {
+  if (!eventsData?.items || !Array.isArray(eventsData.items)) {
     return [];
   }
 
-  return transactionsData.items.map((tx: any) => ({
-    id: tx.id || tx.transaction_id,
-    type: tx.type, // INITIAL_PURCHASE, RENEWAL, CANCELLATION, etc.
-    store: tx.store, // app_store, play_store, stripe
-    price: tx.price?.amount || 0,
-    currency: tx.price?.currency || 'USD',
-    productId: tx.product_id,
-    subscriberId: tx.subscriber?.id || tx.subscriber_id,
-    country: tx.subscriber?.country || tx.country,
-    appUserId: tx.subscriber?.app_user_id,
-    isTrial: tx.is_trial_conversion || false,
-    cancellationReason: tx.cancellation_reason,
-    createdAt: tx.created_at,
-    // Extract custom attributes if available
-    customAttributes: tx.subscriber?.custom_attributes || {},
+  // Filter for purchase-related events
+  const purchaseEvents = eventsData.items.filter((event: any) => {
+    const type = event.type || '';
+    return ['INITIAL_PURCHASE', 'RENEWAL', 'CANCELLATION', 'REFUND'].includes(type);
+  });
+
+  return purchaseEvents.map((event: any) => ({
+    id: event.id,
+    type: event.type,
+    store: event.store,
+    price: event.price?.amount || 0,
+    currency: event.price?.currency || 'USD',
+    productId: event.product_id,
+    subscriberId: event.subscriber?.id,
+    country: event.subscriber?.country,
+    appUserId: event.subscriber?.app_user_id,
+    isTrial: event.is_trial_conversion || false,
+    cancellationReason: event.cancellation_reason,
+    createdAt: event.created_at,
+    customAttributes: event.subscriber?.custom_attributes || {},
   }));
 }
 

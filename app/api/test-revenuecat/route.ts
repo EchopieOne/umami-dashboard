@@ -96,7 +96,34 @@ export async function GET() {
     results.tests.chartsRevenue = { error: String(error) };
   }
 
-  // Test 3: Transactions API
+  // Test 3: Events API (for purchase data)
+  try {
+    const eventsRes = await fetch(
+      `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/events?limit=10`,
+      { headers, cache: 'no-store' }
+    );
+
+    results.tests.events = {
+      status: eventsRes.status,
+      ok: eventsRes.ok,
+    };
+
+    if (eventsRes.ok) {
+      const data = await eventsRes.json();
+      results.tests.events.data = {
+        keys: Object.keys(data),
+        hasItems: Array.isArray(data.items),
+        itemsCount: data.items?.length || 0,
+        sampleEventTypes: data.items?.slice(0, 3)?.map((e: any) => e.type),
+      };
+    } else {
+      results.tests.events.error = await eventsRes.text();
+    }
+  } catch (error) {
+    results.tests.events = { error: String(error) };
+  }
+
+  // Test 4: Transactions API (backup)
   try {
     const txRes = await fetch(
       `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions`,
