@@ -163,7 +163,7 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
 }
 
 // Parse transaction details from customers data
-function parseRevenueCatTransactions(customersData: any) {
+function parseRevenueCatTransactions(customersData: any, startAt?: number, endAt?: number) {
   if (!customersData?.items || !Array.isArray(customersData.items)) {
     return [];
   }
@@ -225,8 +225,18 @@ function parseRevenueCatTransactions(customersData: any) {
 
   console.log(`Parsed ${transactions.length} transactions from ${subsCount} subscriptions and ${purchasesCount} purchases`);
 
-  return transactions
-    .filter((t: any) => t.createdAt)
+  // Filter by date range if provided
+  let filteredTransactions = transactions.filter((t: any) => t.createdAt);
+  
+  if (startAt && endAt) {
+    filteredTransactions = filteredTransactions.filter((t: any) => {
+      const txDate = new Date(t.createdAt).getTime();
+      return txDate >= startAt && txDate <= endAt;
+    });
+    console.log(`Filtered to ${filteredTransactions.length} transactions within date range`);
+  }
+
+  return filteredTransactions
     .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
@@ -743,7 +753,7 @@ export async function GET(request: Request) {
           .sort((a: CountryMetric, b: CountryMetric) => (b.y || 0) - (a.y || 0))
           .slice(0, 5)
           .map((c: CountryMetric) => ({ name: c.x || 'Unknown', value: c.y || 0 })),
-        transactions: parseRevenueCatTransactions(revenueCatTransactions),
+        transactions: parseRevenueCatTransactions(revenueCatTransactions, startAt, endAt),
       },
       
       revenueCat: {
