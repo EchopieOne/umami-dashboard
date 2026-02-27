@@ -70,25 +70,23 @@ async function getRevenueCatRevenue(startAt: number, endAt: number) {
   if (!overviewRes.ok) {
     const overviewError = await overviewRes.text();
     console.error('RevenueCat overview error:', overviewError);
-  }
-  if (!chartsRevenueRes.ok) {
-    const chartsError = await chartsRevenueRes.text();
-    console.error('RevenueCat charts error:', chartsError);
-  }
-
-  if (!overviewRes.ok || !chartsRevenueRes.ok) {
     throw new Error(
-      `RevenueCat revenue fetch failed: overview=${overviewRes.status}, charts=${chartsRevenueRes.status}`
+      `RevenueCat overview fetch failed: ${overviewRes.status}`
     );
   }
 
-  const [overviewData, chartsRevenueData] = await Promise.all([
-    overviewRes.json(),
-    chartsRevenueRes.json(),
-  ]);
+  // Charts API is optional - it may fail due to permissions
+  let chartsRevenueData = null;
+  if (chartsRevenueRes.ok) {
+    chartsRevenueData = await chartsRevenueRes.json();
+    console.log('RevenueCat charts:', JSON.stringify(chartsRevenueData, null, 2).slice(0, 800));
+  } else {
+    const chartsError = await chartsRevenueRes.text();
+    console.error('RevenueCat charts error (non-critical):', chartsError);
+  }
 
+  const overviewData = await overviewRes.json();
   console.log('RevenueCat overview:', JSON.stringify(overviewData, null, 2).slice(0, 800));
-  console.log('RevenueCat charts:', JSON.stringify(chartsRevenueData, null, 2).slice(0, 800));
 
   return {
     overview: overviewData,
