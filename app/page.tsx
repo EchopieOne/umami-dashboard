@@ -19,11 +19,9 @@ import {
   Cell,
 } from 'recharts';
 import { 
-  Calendar, 
   Users, 
   ShoppingCart, 
   TrendingUp, 
-  Loader2, 
   RefreshCw, 
   Bell,
   Crown,
@@ -32,7 +30,8 @@ import {
   Cloud,
   Smartphone,
   AlertCircle,
-  Globe
+  Globe,
+  DollarSign,
 } from 'lucide-react';
 import { DateRangePicker } from '@/components/date-range-picker';
 import { Button } from '@/components/ui/button';
@@ -75,6 +74,11 @@ interface SummaryData {
   pageviews: number;
   bounceRate: number;
   avgTime: number;
+  mrr: number;
+  totalRevenue: number;
+  activeSubscriptions: number;
+  trials: number;
+  churnRate: number;
 }
 
 interface ChartData {
@@ -120,6 +124,14 @@ interface TimeRange {
 }
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(value || 0);
+}
 
 function MetricCardSkeleton() {
   return (
@@ -255,6 +267,46 @@ export default function Dashboard() {
                 icon={ShoppingCart}
                 color="purple"
                 subtitle={`${data.summary.purchaseFunnel.success} 单成功`}
+              />
+            </>
+          ) : null}
+        </div>
+
+        {/* RevenueCat 指标 */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+          {loading ? (
+            <>
+              <MetricCardSkeleton />
+              <MetricCardSkeleton />
+              <MetricCardSkeleton />
+              <MetricCardSkeleton />
+            </>
+          ) : data ? (
+            <>
+              <MetricCard
+                title="MRR"
+                value={formatCurrency(data.summary.mrr)}
+                icon={DollarSign}
+                color="green"
+              />
+              <MetricCard
+                title="Total Revenue"
+                value={formatCurrency(data.summary.totalRevenue)}
+                icon={TrendingUp}
+                color="blue"
+              />
+              <MetricCard
+                title="Active Subs"
+                value={data.summary.activeSubscriptions.toLocaleString()}
+                icon={Users}
+                color="purple"
+              />
+              <MetricCard
+                title="Trial Conversions"
+                value={data.summary.trials.toLocaleString()}
+                icon={ShoppingCart}
+                color="amber"
+                subtitle={`Churn ${data.summary.churnRate.toFixed(2)}%`}
               />
             </>
           ) : null}

@@ -15,6 +15,7 @@ EchoPie 的 Umami 数据分析仪表盘
 - Tailwind CSS + shadcn/ui
 - Recharts 图表库
 - Umami API
+- RevenueCat API (optional)
 
 ## 部署
 
@@ -28,6 +29,10 @@ EchoPie 的 Umami 数据分析仪表盘
 - `UMAMI_URL`: https://ubm.echopie.com
 - `UMAMI_USERNAME`: (从 Umami 后台获取)
 - `UMAMI_PASSWORD`: (从 Umami 后台获取)
+- `REVENUECAT_API_KEY`: RevenueCat V2 API Bearer Token (可选)
+- `REVENUECAT_PROJECT_ID`: RevenueCat Project ID (可选)
+
+如果未配置 RevenueCat 环境变量，仪表盘仍可正常运行，并仅展示 Umami 数据。
 
 ### 方式二: CLI 部署
 

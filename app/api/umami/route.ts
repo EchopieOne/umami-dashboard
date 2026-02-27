@@ -3,9 +3,245 @@ import { NextResponse } from 'next/server';
 const UMAMI_URL = (process.env.UMAMI_URL || 'https://ubm.echopie.com').trim();
 const USERNAME = (process.env.UMAMI_USERNAME || 'admin').trim();
 const PASSWORD = (process.env.UMAMI_PASSWORD || 'umami').trim();
+const REVENUECAT_BASE_URL = 'https://api.revenuecat.com/v2';
+const REVENUECAT_API_KEY = (process.env.REVENUECAT_API_KEY || '').trim();
+const REVENUECAT_PROJECT_ID = (process.env.REVENUECAT_PROJECT_ID || '').trim();
 
 let cachedToken: string | null = null;
 let cachedWebsiteId: string | null = null;
+
+interface EventItem {
+  eventName?: string;
+  createdAt?: number;
+}
+
+interface CountryMetric {
+  x?: string;
+  y?: number;
+}
+
+function hasRevenueCatCredentials() {
+  return Boolean(REVENUECAT_API_KEY && REVENUECAT_PROJECT_ID);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getRevenueCatHeaders() {
+  return {
+    Authorization: `Bearer ${REVENUECAT_API_KEY}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function getRevenueCatRevenue(startAt: number, endAt: number) {
+  if (!hasRevenueCatCredentials()) {
+    console.log('RevenueCat credentials missing - API_KEY:', !!REVENUECAT_API_KEY, 'PROJECT_ID:', !!REVENUECAT_PROJECT_ID);
+    return null;
+  }
+
+  // Convert timestamps to ISO date strings (YYYY-MM-DD)
+  const startDate = new Date(startAt).toISOString().split('T')[0];
+  const endDate = new Date(endAt).toISOString().split('T')[0];
+
+  console.log(`Fetching RevenueCat data from ${startDate} to ${endDate}`);
+  console.log(`Project ID: ${REVENUECAT_PROJECT_ID.slice(0, 8)}...`);
+
+  const overviewUrl = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/metrics/overview`;
+  const chartsUrl = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/charts/revenue?start_date=${startDate}&end_date=${endDate}&resolution=day`;
+
+  console.log('Overview URL:', overviewUrl);
+  console.log('Charts URL:', chartsUrl);
+
+  const [overviewRes, chartsRevenueRes] = await Promise.all([
+    fetch(overviewUrl, {
+      headers: getRevenueCatHeaders(),
+      cache: 'no-store',
+    }),
+    fetch(chartsUrl, {
+      headers: getRevenueCatHeaders(),
+      cache: 'no-store',
+    }),
+  ]);
+
+  console.log(`RevenueCat API status: overview=${overviewRes.status}, charts=${chartsRevenueRes.status}`);
+
+  if (!overviewRes.ok) {
+    const overviewError = await overviewRes.text();
+    console.error('RevenueCat overview error:', overviewError);
+  }
+  if (!chartsRevenueRes.ok) {
+    const chartsError = await chartsRevenueRes.text();
+    console.error('RevenueCat charts error:', chartsError);
+  }
+
+  if (!overviewRes.ok || !chartsRevenueRes.ok) {
+    throw new Error(
+      `RevenueCat revenue fetch failed: overview=${overviewRes.status}, charts=${chartsRevenueRes.status}`
+    );
+  }
+
+  const [overviewData, chartsRevenueData] = await Promise.all([
+    overviewRes.json(),
+    chartsRevenueRes.json(),
+  ]);
+
+  console.log('RevenueCat overview:', JSON.stringify(overviewData, null, 2).slice(0, 800));
+  console.log('RevenueCat charts:', JSON.stringify(chartsRevenueData, null, 2).slice(0, 800));
+
+  return {
+    overview: overviewData,
+    chartsRevenue: chartsRevenueData,
+  };
+}
+
+async function getRevenueCatTransactions() {
+  if (!hasRevenueCatCredentials()) return null;
+
+  const res = await fetch(
+    `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions`,
+    {
+      headers: getRevenueCatHeaders(),
+      cache: 'no-store',
+    }
+  );
+
+  if (!res.ok) {
+    throw new Error(`RevenueCat transactions fetch failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+function readNumberAtPaths(source: unknown, paths: string[]) {
+  if (!isRecord(source)) return undefined;
+
+  for (const path of paths) {
+    const segments = path.split('.');
+    let current: unknown = source;
+
+    for (const segment of segments) {
+      if (isRecord(current) && segment in current) {
+        current = current[segment];
+      } else {
+        current = undefined;
+        break;
+      }
+    }
+
+    if (typeof current === 'number') return current;
+    if (typeof current === 'string' && current.trim() !== '' && !Number.isNaN(Number(current))) {
+      return Number(current);
+    }
+  }
+
+  return undefined;
+}
+
+function countTrialConversions(transactionsData: unknown): number {
+  const container = isRecord(transactionsData) ? transactionsData : {};
+  const list = container.items || container.data || container.transactions || [];
+  if (!Array.isArray(list)) return 0;
+
+  return list.filter((tx) => {
+    if (!isRecord(tx)) return false;
+    return Boolean(
+      tx.is_trial_conversion ||
+      tx.trial_conversion ||
+      tx.converted_from_trial
+    );
+  }).length;
+}
+
+function getMetricValueById(metrics: unknown, id: string): number | undefined {
+  if (!Array.isArray(metrics)) return undefined;
+  const metric = metrics.find((m) => isRecord(m) && m.id === id);
+  if (isRecord(metric) && typeof metric.value === 'number') {
+    return metric.value;
+  }
+  return undefined;
+}
+
+function parseRevenueCatMetrics(revenueData: unknown, transactionsData: unknown) {
+  const revenueRecord = isRecord(revenueData) ? revenueData : {};
+  const overview = revenueRecord.overview;
+  const chartsRevenue = revenueRecord.chartsRevenue;
+
+  // Debug: Log raw data structure
+  console.log('RevenueCat parse - overview type:', typeof overview);
+  console.log('RevenueCat parse - overview keys:', isRecord(overview) ? Object.keys(overview) : 'N/A');
+  console.log('RevenueCat parse - chartsRevenue type:', typeof chartsRevenue);
+
+  // Overview metrics is an array with {id, value} objects
+  const overviewMetrics = isRecord(overview) ? overview.metrics : undefined;
+  console.log('RevenueCat parse - overviewMetrics:', Array.isArray(overviewMetrics) ? `array[${overviewMetrics.length}]` : overviewMetrics);
+
+  // Log all available metric IDs for debugging
+  if (Array.isArray(overviewMetrics)) {
+    console.log('Available metric IDs:', overviewMetrics.map((m: any) => m.id).join(', '));
+  }
+
+  const mrr =
+    getMetricValueById(overviewMetrics, 'mrr') ??
+    readNumberAtPaths(chartsRevenue, [
+      'mrr',
+      'data.mrr',
+      'summary.mrr',
+      'totals.mrr',
+      'totals.monthly_recurring_revenue',
+    ]) ??
+    0;
+
+  const totalRevenue =
+    getMetricValueById(overviewMetrics, 'revenue') ??
+    getMetricValueById(overviewMetrics, 'total_revenue') ??
+    readNumberAtPaths(chartsRevenue, [
+      'revenue',
+      'data.revenue',
+      'summary.revenue',
+      'totals.revenue',
+      'totals.total_revenue',
+      'total_revenue',
+    ]) ??
+    0;
+
+  const activeSubscriptions =
+    getMetricValueById(overviewMetrics, 'active_subscriptions') ??
+    getMetricValueById(overviewMetrics, 'active_subscriptions_count') ??
+    readNumberAtPaths(transactionsData, [
+      'active_subscriptions',
+      'summary.active_subscriptions',
+      'totals.active_subscriptions',
+    ]) ??
+    0;
+
+  const trials =
+    getMetricValueById(overviewMetrics, 'active_trials') ??
+    getMetricValueById(overviewMetrics, 'trial_conversions') ??
+    getMetricValueById(overviewMetrics, 'trials') ??
+    countTrialConversions(transactionsData);
+
+  const churnRate =
+    getMetricValueById(overviewMetrics, 'churn_rate') ??
+    getMetricValueById(overviewMetrics, 'subscription_churn_rate') ??
+    readNumberAtPaths(chartsRevenue, [
+      'churn_rate',
+      'data.churn_rate',
+      'summary.churn_rate',
+    ]) ??
+    0;
+
+  console.log('Parsed RevenueCat metrics:', { mrr, totalRevenue, activeSubscriptions, trials, churnRate });
+
+  return {
+    mrr,
+    totalRevenue,
+    activeSubscriptions,
+    trials,
+    churnRate,
+  };
+}
 
 async function login() {
   if (!USERNAME || !PASSWORD) {
@@ -97,7 +333,7 @@ function formatDate(timestamp: number) {
   return new Date(timestamp).toISOString().split('T')[0];
 }
 
-function getDailyData(events: any[] | undefined, startAt: number, endAt: number) {
+function getDailyData(events: EventItem[] | undefined, startAt: number, endAt: number) {
   if (!Array.isArray(events)) {
     console.error('getDailyData: events is not an array', events);
     return [];
@@ -127,7 +363,7 @@ function getDailyData(events: any[] | undefined, startAt: number, endAt: number)
 }
 
 // 分析闹钟类型分布
-function analyzeAlarmTypes(events: any[] | undefined) {
+function analyzeAlarmTypes(events: EventItem[] | undefined) {
   if (!Array.isArray(events)) {
     console.error('analyzeAlarmTypes: events is not an array', events);
     return [];
@@ -160,12 +396,12 @@ function analyzeAlarmTypes(events: any[] | undefined) {
   });
   
   return Object.entries(types)
-    .filter(([_, count]) => count > 0)
+    .filter(([, count]) => count > 0)
     .map(([name, value]) => ({ name, value }));
 }
 
 // 获取国家分布前5名
-function getTopCountries(countries: any) {
+function getTopCountries(countries: unknown) {
   console.log('getTopCountries input:', JSON.stringify(countries));
   
   if (!countries) {
@@ -179,11 +415,12 @@ function getTopCountries(countries: any) {
   }
   
   // 按访问量排序并取前5
-  const sorted = countries
-    .filter((c: any) => c && c.x && c.y)
-    .sort((a: any, b: any) => (b.y || 0) - (a.y || 0))
+  const typedCountries = countries as CountryMetric[];
+  const sorted = typedCountries
+    .filter((c) => c && c.x && c.y)
+    .sort((a, b) => (b.y || 0) - (a.y || 0))
     .slice(0, 5)
-    .map((c: any) => ({
+    .map((c) => ({
       name: c.x || 'Unknown',
       value: c.y || 0,
     }));
@@ -193,7 +430,7 @@ function getTopCountries(countries: any) {
 }
 
 // 分析购买漏斗
-function analyzePurchaseFunnel(purchaseEvents: any[], clickEvents: any[]) {
+function analyzePurchaseFunnel(purchaseEvents: EventItem[], clickEvents: EventItem[]) {
   const clicks = clickEvents.length;
   const success = purchaseEvents.filter(e => e.eventName === 'setting.purchase.success').length;
   const failed = purchaseEvents.filter(e => e.eventName === 'setting.purchase.failed').length;
@@ -299,6 +536,8 @@ export async function GET(request: Request) {
       newUsers30d,
       activeUsers30d,
       purchases30d,
+      revenueCatRevenue,
+      revenueCatTransactions,
     ] = await Promise.all([
       getEvents(startAt, endAt, 'app.launch'),
       getEvents(startAt, endAt, 'new.user'),
@@ -339,10 +578,18 @@ export async function GET(request: Request) {
       getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'new.user'),
       getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'user.daily.active'),
       getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'setting.purchase.success'),
+      getRevenueCatRevenue(startAt, endAt).catch((error) => {
+        console.error('RevenueCat revenue error:', error);
+        return null;
+      }),
+      getRevenueCatTransactions().catch((error) => {
+        console.error('RevenueCat transactions error:', error);
+        return null;
+      }),
     ]);
     
     // 计算闹钟类型（从前面的所有事件中筛选）
-    const alarmTypeEvents = alarmTypes.data?.filter((e: any) => 
+    const alarmTypeEvents = alarmTypes.data?.filter((e: EventItem) => 
       e.eventName?.includes('alarm.add.')
     ) || [];
     
@@ -360,6 +607,14 @@ export async function GET(request: Request) {
     
     const visitors = stats.visitors?.value || stats.visitors || 0;
     const prevVisitors = prevStats.visitors?.value || prevStats.visitors || 0;
+    const revenueCatMetrics = parseRevenueCatMetrics(revenueCatRevenue, revenueCatTransactions);
+    
+    // Debug: log raw RevenueCat data
+    console.log('Raw RevenueCat data:', {
+      hasRevenueCatRevenue: !!revenueCatRevenue,
+      hasRevenueCatTransactions: !!revenueCatTransactions,
+      overview: revenueCatRevenue ? (revenueCatRevenue as Record<string, unknown>).overview : null,
+    });
     
     const days = Math.ceil((endAt - startAt) / (24 * 60 * 60 * 1000));
     
@@ -404,6 +659,13 @@ export async function GET(request: Request) {
         pageviews: stats.pageviews?.value || stats.pageviews || 0,
         bounceRate: stats.bounces?.value || stats.bounces || 0,
         avgTime: stats.time?.value || stats.time || 0,
+        
+        // RevenueCat 指标（可选）
+        mrr: revenueCatMetrics.mrr,
+        totalRevenue: revenueCatMetrics.totalRevenue,
+        activeSubscriptions: revenueCatMetrics.activeSubscriptions,
+        trials: revenueCatMetrics.trials,
+        churnRate: revenueCatMetrics.churnRate,
       },
       
       charts: {
@@ -429,6 +691,8 @@ export async function GET(request: Request) {
         debug: {
           countriesType: typeof countries,
           countriesData: countries,
+          revenueCatRaw: revenueCatRevenue,
+          revenueCatMetrics,
         }
       },
       
