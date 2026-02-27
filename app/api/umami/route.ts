@@ -177,14 +177,15 @@ function parseRevenueCatTransactions(customersData: any) {
     if (customer.subscriptions?.items && customer.subscriptions.items.length > 0) {
       subsCount += customer.subscriptions.items.length;
       customer.subscriptions.items.forEach((sub: any) => {
+        const revenue = sub.total_revenue_in_usd || {};
         transactions.push({
-          id: sub.id || `${customer.id}_${sub.product_identifier || 'unknown'}`,
+          id: sub.id || `${customer.id}_${sub.product_id || 'unknown'}`,
           type: sub.auto_renewal_status === 'will_not_renew' ? 'CANCELLATION' : 
                 sub.is_trial ? 'TRIAL' : 'SUBSCRIPTION',
           store: sub.store || 'app_store',
-          price: sub.price?.amount || sub.current_amount?.amount || 0,
-          currency: sub.price?.currency || sub.current_amount?.currency || 'USD',
-          productId: sub.product_identifier || 'unknown',
+          price: revenue.gross || 0,
+          currency: revenue.currency || 'USD',
+          productId: sub.product_id || 'unknown',
           subscriberId: sub.customer_id || customer.id,
           country: sub.country || customer.last_seen_country,
           appUserId: customer.id,
@@ -201,20 +202,21 @@ function parseRevenueCatTransactions(customersData: any) {
     if (customer.purchases?.items && customer.purchases.items.length > 0) {
       purchasesCount += customer.purchases.items.length;
       customer.purchases.items.forEach((purchase: any) => {
+        const revenue = purchase.revenue_in_usd || {};
         transactions.push({
-          id: purchase.id || `${customer.id}_${purchase.product_identifier || 'unknown'}`,
-          type: purchase.type || 'INITIAL_PURCHASE',
+          id: purchase.id || `${customer.id}_${purchase.product_id || 'unknown'}`,
+          type: 'INITIAL_PURCHASE',
           store: purchase.store || 'app_store',
-          price: purchase.price?.amount || 0,
-          currency: purchase.price?.currency || 'USD',
-          productId: purchase.product_identifier || 'unknown',
+          price: revenue.gross || 0,
+          currency: revenue.currency || 'USD',
+          productId: purchase.product_id || 'unknown',
           subscriberId: purchase.customer_id || customer.id,
           country: purchase.country || customer.last_seen_country,
           appUserId: customer.id,
           isTrial: false,
           cancellationReason: undefined,
           createdAt: purchase.purchased_at || purchase.created_at,
-          expiresAt: null, // Lifetime purchases don't expire
+          expiresAt: null,
           customAttributes: customer.attributes || {},
         });
       });
