@@ -169,10 +169,13 @@ function parseRevenueCatTransactions(customersData: any) {
   }
 
   const transactions: any[] = [];
+  let subsCount = 0;
+  let purchasesCount = 0;
   
   customersData.items.forEach((customer: any) => {
     // Extract from subscriptions
     if (customer.subscriptions?.items && customer.subscriptions.items.length > 0) {
+      subsCount += customer.subscriptions.items.length;
       customer.subscriptions.items.forEach((sub: any) => {
         transactions.push({
           id: sub.id || `${customer.id}_${sub.product_identifier || 'unknown'}`,
@@ -196,6 +199,7 @@ function parseRevenueCatTransactions(customersData: any) {
     
     // Extract from purchases (non-subscription/lifetime)
     if (customer.purchases?.items && customer.purchases.items.length > 0) {
+      purchasesCount += customer.purchases.items.length;
       customer.purchases.items.forEach((purchase: any) => {
         transactions.push({
           id: purchase.id || `${customer.id}_${purchase.product_identifier || 'unknown'}`,
@@ -216,6 +220,8 @@ function parseRevenueCatTransactions(customersData: any) {
       });
     }
   });
+
+  console.log(`Parsed ${transactions.length} transactions from ${subsCount} subscriptions and ${purchasesCount} purchases`);
 
   return transactions
     .filter((t: any) => t.createdAt)
