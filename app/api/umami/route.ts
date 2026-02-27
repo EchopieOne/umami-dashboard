@@ -105,61 +105,9 @@ async function getRevenueCatRevenue(startAt: number, endAt: number) {
 }
 
 async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
-  if (!hasRevenueCatCredentials()) return null;
-  
-  // Get customers list
-  const url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers?limit=100`;
-  
-  console.log('Fetching RevenueCat customers:', url);
-  
-  const res = await fetch(url, { 
-    headers: getRevenueCatHeaders(), 
-    cache: 'no-store' 
-  });
-  
-  if (!res.ok) {
-    const errorText = await res.text();
-    console.error('RevenueCat customers error:', res.status, errorText);
-    return null;
-  }
-  
-  const data = await res.json();
-  console.log(`Retrieved ${data.items?.length || 0} customers`);
-  
-  // Fetch detailed subscription and purchase info for each customer
-  const customersWithDetails = await Promise.all(
-    (data.items || []).slice(0, 50).map(async (customer: any) => {
-      try {
-        // Get subscriptions
-        const subRes = await fetch(
-          `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customer.id)}/subscriptions`,
-          { headers: getRevenueCatHeaders(), cache: 'no-store' }
-        );
-        
-        // Get purchases (non-subscription)
-        const purchaseRes = await fetch(
-          `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customer.id)}/purchases`,
-          { headers: getRevenueCatHeaders(), cache: 'no-store' }
-        );
-        
-        const result: any = { ...customer };
-        
-        if (subRes.ok) {
-          result.subscriptions = await subRes.json();
-        }
-        
-        if (purchaseRes.ok) {
-          result.purchases = await purchaseRes.json();
-        }
-        
-        return result;
-      } catch (e) {
-        return customer;
-      }
-    })
-  );
-  
-  return { ...data, items: customersWithDetails };
+  // 暂时禁用详细交易查询以优化性能
+  // RevenueCat API 调用过多导致加载缓慢
+  return null;
 }
 
 // Parse transaction details from customers data
