@@ -128,7 +128,7 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   
   // Fetch detailed subscription info for each customer
   const customersWithSubs = await Promise.all(
-    (data.items || []).slice(0, 20).map(async (customer: any) => {
+    (data.items || []).slice(0, 50).map(async (customer: any) => {
       try {
         const subRes = await fetch(
           `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customer.id)}/subscriptions`,
