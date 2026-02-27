@@ -154,7 +154,45 @@ export async function GET() {
     results.tests.customers = { error: String(error) };
   }
 
-  // Test 5: Transactions API (backup)
+  // Test 5: Subscriptions API for a customer
+  try {
+    const customersRes = await fetch(
+      `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers?limit=1`,
+      { headers, cache: 'no-store' }
+    );
+    
+    if (customersRes.ok) {
+      const customersData = await customersRes.json();
+      const customerId = customersData.items?.[0]?.id;
+      
+      if (customerId) {
+        const subsRes = await fetch(
+          `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customerId)}/subscriptions`,
+          { headers, cache: 'no-store' }
+        );
+
+        results.tests.subscriptions = {
+          status: subsRes.status,
+          ok: subsRes.ok,
+        };
+
+        if (subsRes.ok) {
+          const data = await subsRes.json();
+          results.tests.subscriptions.data = {
+            keys: Object.keys(data),
+            hasItems: Array.isArray(data.items),
+            itemsCount: data.items?.length || 0,
+          };
+        } else {
+          results.tests.subscriptions.error = await subsRes.text();
+        }
+      }
+    }
+  } catch (error) {
+    results.tests.subscriptions = { error: String(error) };
+  }
+
+  // Test 6: Transactions API (backup)
   try {
     const txRes = await fetch(
       `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions`,
