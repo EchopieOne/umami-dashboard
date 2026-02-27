@@ -162,19 +162,20 @@ function parseRevenueCatTransactions(customersData: any) {
     if (customer.subscriptions?.items && customer.subscriptions.items.length > 0) {
       customer.subscriptions.items.forEach((sub: any) => {
         transactions.push({
-          id: sub.id || `${customer.id}_${sub.product_id}`,
-          type: sub.is_trial ? 'TRIAL' : (sub.will_renew ? 'RENEWAL' : 'INITIAL_PURCHASE'),
-          store: sub.store || 'unknown',
-          price: sub.price?.amount || 0,
-          currency: sub.price?.currency || 'USD',
-          productId: sub.product_id,
-          subscriberId: customer.id,
-          country: customer.last_seen_country || customer.attributes?.['$ipCountry']?.value,
+          id: sub.id || `${customer.id}_${sub.product_identifier || 'unknown'}`,
+          type: sub.auto_renewal_status === 'will_not_renew' ? 'CANCELLATION' : 
+                sub.is_trial ? 'TRIAL' : 'INITIAL_PURCHASE',
+          store: sub.store || 'app_store',
+          price: sub.price?.amount || sub.current_amount?.amount || 0,
+          currency: sub.price?.currency || sub.current_amount?.currency || 'USD',
+          productId: sub.product_identifier || 'unknown',
+          subscriberId: sub.customer_id || customer.id,
+          country: sub.country || customer.last_seen_country,
           appUserId: customer.id,
           isTrial: sub.is_trial || false,
-          cancellationReason: sub.unsubscribe_detected_at ? 'USER_CANCELLED' : undefined,
-          createdAt: sub.purchased_at || sub.start_date,
-          expiresAt: sub.expires_at,
+          cancellationReason: sub.auto_renewal_status === 'will_not_renew' ? 'USER_CANCELLED' : undefined,
+          createdAt: sub.current_period_starts_at || sub.starts_at,
+          expiresAt: sub.current_period_ends_at || sub.ends_at,
           customAttributes: customer.attributes || {},
         });
       });
