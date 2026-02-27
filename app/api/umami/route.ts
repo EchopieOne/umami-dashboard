@@ -63,7 +63,7 @@ async function getToken(): Promise<string> {
   
   cachedToken = data.token;
   tokenExpiry = now + 55 * 60 * 1000;
-  return cachedToken;
+  return cachedToken as string;
 }
 
 async function getWebsiteId(token: string): Promise<string> {
