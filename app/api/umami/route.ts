@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { Redis } from '@upstash/redis';
 
 const UMAMI_URL = (process.env.UMAMI_URL || 'https://ubm.echopie.com').trim();
 const USERNAME = (process.env.UMAMI_USERNAME || 'admin').trim();
@@ -8,16 +7,48 @@ const REVENUECAT_BASE_URL = 'https://api.revenuecat.com/v2';
 const REVENUECAT_API_KEY = (process.env.REVENUECAT_API_KEY || '').trim();
 const REVENUECAT_PROJECT_ID = (process.env.REVENUECAT_PROJECT_ID || '').trim();
 
-// Upstash Redis 缓存
-const redis = Redis.fromEnv();
-const CACHE_TTL = 300; // 5分钟缓存
+// 使用 Vercel KV 或 Upstash
+let kv: any = null;
+try {
+  // 尝试导入 @vercel/kv
+  const { kv: vercelKv } = require('@vercel/kv');
+  kv = vercelKv;
+} catch {
+  // 如果没有 Vercel KV，使用内存缓存
+  console.log('Vercel KV not available, using memory cache');
+}
+
+// 内存缓存（备用）
+const memoryCache: Record<string, { data: string; expiry: number }> = {};
+const CACHE_TTL = 300; // 5分钟
 
 // Umami 登录缓存
 let cachedToken: string | null = null;
 let tokenExpiry = 0;
 
-// 简化接口
 interface EventItem { eventName?: string; createdAt?: number; }
+
+// 缓存辅助函数
+async function getCache(key: string): Promise<string | null> {
+  if (kv) {
+    return await kv.get(key);
+  }
+  // 内存缓存
+  const item = memoryCache[key];
+  if (item && item.expiry > Date.now()) {
+    return item.data;
+  }
+  return null;
+}
+
+async function setCache(key: string, data: string): Promise<void> {
+  if (kv) {
+    await kv.set(key, data, { ex: CACHE_TTL });
+  } else {
+    // 内存缓存
+    memoryCache[key] = { data, expiry: Date.now() + CACHE_TTL * 1000 };
+  }
+}
 
 async function getToken(): Promise<string> {
   const now = Date.now();
@@ -142,7 +173,7 @@ export async function GET(request: Request) {
     const cacheKey = `dashboard:${range}`;
     
     // 尝试从缓存读取
-    const cached = await redis.get<string>(cacheKey);
+    const cached = await getCache(cacheKey);
     if (cached) {
       console.log('Cache hit for', cacheKey);
       return NextResponse.json(JSON.parse(cached));
@@ -230,7 +261,7 @@ export async function GET(request: Request) {
     };
     
     // 写入缓存
-    await redis.set(cacheKey, JSON.stringify(data), { ex: CACHE_TTL });
+    await setCache(cacheKey, JSON.stringify(data));
     console.log('Cache set for', cacheKey);
     
     return NextResponse.json(data);
