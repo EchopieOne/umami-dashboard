@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { kv } from '@vercel/kv';
 
 const UMAMI_URL = (process.env.UMAMI_URL || 'https://ubm.echopie.com').trim();
 const USERNAME = (process.env.UMAMI_USERNAME || 'admin').trim();
@@ -7,34 +8,22 @@ const REVENUECAT_BASE_URL = 'https://api.revenuecat.com/v2';
 const REVENUECAT_API_KEY = (process.env.REVENUECAT_API_KEY || '').trim();
 const REVENUECAT_PROJECT_ID = (process.env.REVENUECAT_PROJECT_ID || '').trim();
 
-// 使用 Vercel KV 或 Upstash
-let kv: any = null;
-try {
-  // 尝试导入 @vercel/kv
-  const { kv: vercelKv } = require('@vercel/kv');
-  kv = vercelKv;
-} catch {
-  // 如果没有 Vercel KV，使用内存缓存
-  console.log('Vercel KV not available, using memory cache');
-}
-
-// 内存缓存（备用）
-const memoryCache: Record<string, { data: string; expiry: number }> = {};
 const CACHE_TTL = 300; // 5分钟
 
-// Umami 登录缓存
-let cachedToken: string | null = null;
-let tokenExpiry = 0;
+// 内存缓存备用
+const memoryCache = new Map<string, { data: string; expiry: number }>();
 
-interface EventItem { eventName?: string; createdAt?: number; }
-
-// 缓存辅助函数
+// 安全的缓存操作
 async function getCache(key: string): Promise<string | null> {
-  if (kv) {
-    return await kv.get(key);
+  try {
+    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+      return await kv.get(key);
+    }
+  } catch (e) {
+    console.log('KV get failed, using memory cache');
   }
-  // 内存缓存
-  const item = memoryCache[key];
+  // 内存缓存回退
+  const item = memoryCache.get(key);
   if (item && item.expiry > Date.now()) {
     return item.data;
   }
@@ -42,13 +31,23 @@ async function getCache(key: string): Promise<string | null> {
 }
 
 async function setCache(key: string, data: string): Promise<void> {
-  if (kv) {
-    await kv.set(key, data, { ex: CACHE_TTL });
-  } else {
-    // 内存缓存
-    memoryCache[key] = { data, expiry: Date.now() + CACHE_TTL * 1000 };
+  try {
+    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+      await kv.set(key, data, { ex: CACHE_TTL });
+      return;
+    }
+  } catch (e) {
+    console.log('KV set failed, using memory cache');
   }
+  // 内存缓存回退
+  memoryCache.set(key, { data, expiry: Date.now() + CACHE_TTL * 1000 });
 }
+
+// Umami 登录缓存
+let cachedToken: string | null = null;
+let tokenExpiry = 0;
+
+interface EventItem { eventName?: string; createdAt?: number; }
 
 async function getToken(): Promise<string> {
   const now = Date.now();
@@ -64,7 +63,7 @@ async function getToken(): Promise<string> {
   
   cachedToken = data.token;
   tokenExpiry = now + 55 * 60 * 1000;
-  return cachedToken as string;
+  return cachedToken;
 }
 
 async function getWebsiteId(token: string): Promise<string> {
