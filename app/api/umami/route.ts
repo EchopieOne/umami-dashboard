@@ -164,6 +164,12 @@ function getMetricValueById(metrics: unknown, id: string): number | undefined {
 }
 
 function parseRevenueCatMetrics(revenueData: unknown, transactionsData: unknown) {
+  // Check if revenueData contains an error
+  if (isRecord(revenueData) && revenueData.error) {
+    console.error('RevenueCat data has error:', revenueData.error);
+    return { mrr: 0, totalRevenue: 0, activeSubscriptions: 0, trials: 0, churnRate: 0, _error: revenueData.error };
+  }
+  
   const revenueRecord = isRecord(revenueData) ? revenueData : {};
   const overview = revenueRecord.overview;
   const chartsRevenue = revenueRecord.chartsRevenue;
@@ -580,11 +586,12 @@ export async function GET(request: Request) {
       getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'setting.purchase.success'),
       getRevenueCatRevenue(startAt, endAt).catch((error) => {
         console.error('RevenueCat revenue error:', error);
-        return null;
+        console.error('RevenueCat error stack:', error instanceof Error ? error.stack : 'no stack');
+        return { error: String(error), overview: null, chartsRevenue: null };
       }),
       getRevenueCatTransactions().catch((error) => {
         console.error('RevenueCat transactions error:', error);
-        return null;
+        return { error: String(error), items: [] };
       }),
     ]);
     
