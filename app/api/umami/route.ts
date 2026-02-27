@@ -107,7 +107,7 @@ async function getRevenueCatRevenue(startAt: number, endAt: number) {
 async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   if (!hasRevenueCatCredentials()) return null;
   
-  // Try customers endpoint to get subscriber data with purchases
+  // Get customers list
   const url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers?limit=100`;
   
   console.log('Fetching RevenueCat customers:', url);
@@ -126,10 +126,30 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   const data = await res.json();
   console.log(`Retrieved ${data.items?.length || 0} customers`);
   
-  return data;
+  // Fetch detailed subscription info for each customer
+  const customersWithSubs = await Promise.all(
+    (data.items || []).slice(0, 20).map(async (customer: any) => {
+      try {
+        const subRes = await fetch(
+          `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/customers/${encodeURIComponent(customer.id)}/subscriptions`,
+          { headers: getRevenueCatHeaders(), cache: 'no-store' }
+        );
+        
+        if (subRes.ok) {
+          const subs = await subRes.json();
+          return { ...customer, subscriptions: subs };
+        }
+        return customer;
+      } catch (e) {
+        return customer;
+      }
+    })
+  );
+  
+  return { ...data, items: customersWithSubs };
 }
 
-// Parse transaction details from customers' entitlements
+// Parse transaction details from customers' subscriptions
 function parseRevenueCatTransactions(customersData: any) {
   if (!customersData?.items || !Array.isArray(customersData.items)) {
     return [];
@@ -138,18 +158,41 @@ function parseRevenueCatTransactions(customersData: any) {
   const transactions: any[] = [];
   
   customersData.items.forEach((customer: any) => {
-    if (customer.entitlements) {
+    // Try subscriptions first
+    if (customer.subscriptions?.items) {
+      customer.subscriptions.items.forEach((sub: any) => {
+        transactions.push({
+          id: sub.id || `${customer.id}_${sub.product_id}`,
+          type: sub.is_trial ? 'TRIAL' : (sub.will_renew ? 'RENEWAL' : 'INITIAL_PURCHASE'),
+          store: sub.store || 'unknown',
+          price: sub.price?.amount || 0,
+          currency: sub.price?.currency || 'USD',
+          productId: sub.product_id,
+          subscriberId: customer.id,
+          country: customer.last_seen_country || customer.attributes?.['$ipCountry']?.value,
+          appUserId: customer.id,
+          isTrial: sub.is_trial || false,
+          cancellationReason: sub.unsubscribe_detected_at ? 'USER_CANCELLED' : undefined,
+          createdAt: sub.purchased_at || sub.start_date,
+          expiresAt: sub.expires_at,
+          customAttributes: customer.attributes || {},
+        });
+      });
+    }
+    
+    // Fallback to entitlements
+    else if (customer.entitlements) {
       Object.entries(customer.entitlements).forEach(([key, entitlement]: [string, any]) => {
         if (entitlement?.purchase_date) {
           transactions.push({
             id: `${customer.id}_${key}`,
             type: entitlement.will_renew ? 'RENEWAL' : 'INITIAL_PURCHASE',
             store: entitlement.store || 'unknown',
-            price: 0, // Price not available in customer data
+            price: 0,
             currency: 'USD',
             productId: key,
             subscriberId: customer.id,
-            country: customer.attributes?.['$ipCountry']?.value,
+            country: customer.last_seen_country,
             appUserId: customer.id,
             isTrial: entitlement.is_trial || false,
             cancellationReason: entitlement.unsubscribe_detected_at ? 'USER_CANCELLED' : undefined,
@@ -161,9 +204,9 @@ function parseRevenueCatTransactions(customersData: any) {
     }
   });
 
-  return transactions.sort((a, b) => 
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  return transactions
+    .filter((t: any) => t.createdAt)
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
 function getMetricValueById(metrics: unknown, id: string): number | undefined {
