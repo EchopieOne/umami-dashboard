@@ -92,11 +92,28 @@ interface ChartData {
   count: number;
 }
 
+interface Transaction {
+  id: string;
+  type: string;
+  store: string;
+  price: number;
+  currency: string;
+  productId: string;
+  subscriberId: string;
+  country?: string;
+  appUserId?: string;
+  isTrial: boolean;
+  cancellationReason?: string;
+  createdAt: string;
+  customAttributes?: Record<string, any>;
+}
+
 interface BreakdownData {
   alarmTypes: { name: string; value: number; percentage: number }[];
   purchaseClicks: { annual: number; lifetime: number; main: number; setting: number; onboarding: number };
   countries: { name: string; value: number }[];
   cities: { name: string; value: number }[];
+  transactions: Transaction[];
 }
 
 interface DataResponse {
@@ -463,6 +480,91 @@ export default function Dashboard() {
                         ))}
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* 交易明细列表 */}
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <ShoppingCart className="w-5 h-5" />
+                      交易明细
+                      <span className="text-sm font-normal text-gray-500 ml-2">
+                        ({data.breakdown.transactions?.length || 0} 笔)
+                      </span>
+                    </CardTitle>
+                    <CardDescription>RevenueCat 实时交易数据</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {data.breakdown.transactions?.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">时间</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">类型</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">商店</th>
+                              <th className="px-3 py-2 text-right font-medium text-gray-600">金额</th>
+                              <th className="px-3 py-2 text-left font-medium text-gray-600">国家</th>
+                              <th className="px-3 py-2 text-center font-medium text-gray-600">试用</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {data.breakdown.transactions.slice(0, 20).map((tx) => (
+                              <tr key={tx.id} className="hover:bg-gray-50">
+                                <td className="px-3 py-2 text-gray-600">
+                                  {new Date(tx.createdAt).toLocaleDateString('zh-CN')}
+                                </td>
+                                <td className="px-3 py-2">
+                                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                    tx.type === 'INITIAL_PURCHASE' ? 'bg-green-100 text-green-800' :
+                                    tx.type === 'RENEWAL' ? 'bg-blue-100 text-blue-800' :
+                                    tx.type === 'CANCELLATION' ? 'bg-red-100 text-red-800' :
+                                    'bg-gray-100 text-gray-800'
+                                  }`}>
+                                    {tx.type === 'INITIAL_PURCHASE' ? '首次购买' :
+                                     tx.type === 'RENEWAL' ? '续订' :
+                                     tx.type === 'CANCELLATION' ? '取消' :
+                                     tx.type === 'REFUND' ? '退款' : tx.type}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2 text-gray-600">
+                                  {tx.store === 'app_store' ? 'App Store' :
+                                   tx.store === 'play_store' ? 'Play Store' : tx.store}
+                                </td>
+                                <td className="px-3 py-2 text-right font-medium">
+                                  {new Intl.NumberFormat('en-US', {
+                                    style: 'currency',
+                                    currency: tx.currency || 'USD'
+                                  }).format(tx.price)}
+                                </td>
+                                <td className="px-3 py-2 text-gray-600">
+                                  {tx.country || '-'}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {tx.isTrial ? (
+                                    <span className="text-amber-600 font-medium">是</span>
+                                  ) : (
+                                    <span className="text-gray-400">-</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {data.breakdown.transactions.length > 20 && (
+                          <p className="text-center text-sm text-gray-500 mt-4">
+                            还有 {data.breakdown.transactions.length - 20} 笔交易...
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <ShoppingCart className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p>暂无交易数据</p>
+                        <p className="text-sm text-gray-400 mt-1">可能由于权限不足或所选时间范围内无交易</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </>

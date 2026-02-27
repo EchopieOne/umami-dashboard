@@ -104,14 +104,59 @@ async function getRevenueCatRevenue(startAt: number, endAt: number) {
   return { overview: overviewData, chartsRevenue: chartsData };
 }
 
-async function getRevenueCatTransactions() {
+async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   if (!hasRevenueCatCredentials()) return null;
-  const res = await fetch(
-    `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions`,
-    { headers: getRevenueCatHeaders(), cache: 'no-store' }
-  );
-  if (!res.ok) return null;
-  return res.json();
+  
+  // Build URL with optional date filtering
+  let url = `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/transactions?limit=100`;
+  
+  if (startAt && endAt) {
+    const startDate = new Date(startAt).toISOString();
+    const endDate = new Date(endAt).toISOString();
+    url += `&after=${encodeURIComponent(startDate)}&before=${encodeURIComponent(endDate)}`;
+  }
+  
+  console.log('Fetching RevenueCat transactions:', url);
+  
+  const res = await fetch(url, { 
+    headers: getRevenueCatHeaders(), 
+    cache: 'no-store' 
+  });
+  
+  if (!res.ok) {
+    const errorText = await res.text();
+    console.error('RevenueCat transactions error:', res.status, errorText);
+    return null;
+  }
+  
+  const data = await res.json();
+  console.log(`Retrieved ${data.items?.length || 0} transactions`);
+  
+  return data;
+}
+
+// Parse transaction details for display
+function parseRevenueCatTransactions(transactionsData: any) {
+  if (!transactionsData?.items || !Array.isArray(transactionsData.items)) {
+    return [];
+  }
+
+  return transactionsData.items.map((tx: any) => ({
+    id: tx.id || tx.transaction_id,
+    type: tx.type, // INITIAL_PURCHASE, RENEWAL, CANCELLATION, etc.
+    store: tx.store, // app_store, play_store, stripe
+    price: tx.price?.amount || 0,
+    currency: tx.price?.currency || 'USD',
+    productId: tx.product_id,
+    subscriberId: tx.subscriber?.id || tx.subscriber_id,
+    country: tx.subscriber?.country || tx.country,
+    appUserId: tx.subscriber?.app_user_id,
+    isTrial: tx.is_trial_conversion || false,
+    cancellationReason: tx.cancellation_reason,
+    createdAt: tx.created_at,
+    // Extract custom attributes if available
+    customAttributes: tx.subscriber?.custom_attributes || {},
+  }));
 }
 
 function getMetricValueById(metrics: unknown, id: string): number | undefined {
@@ -486,7 +531,7 @@ export async function GET(request: Request) {
       getEvents(now - 24 * 60 * 60 * 1000, now, 'user.daily.active'),
       getEvents(now - 30 * 24 * 60 * 60 * 1000, now, 'setting.purchase.success'),
       getRevenueCatRevenue(startAt, endAt).catch(() => null),
-      getRevenueCatTransactions().catch(() => null),
+      getRevenueCatTransactions(startAt, endAt).catch(() => null),
     ]);
     
     const alarmTypeEvents = alarmTypes.data?.filter((e: EventItem) => 
@@ -627,6 +672,11 @@ export async function GET(request: Request) {
           .sort((a: CountryMetric, b: CountryMetric) => (b.y || 0) - (a.y || 0))
           .slice(0, 5)
           .map((c: CountryMetric) => ({ name: c.x || 'Unknown', value: c.y || 0 })),
+        transactions: parseRevenueCatTransactions(revenueCatTransactions),
+      },
+      
+      revenueCat: {
+        rawTransactions: revenueCatTransactions,
       },
       
       range: {
