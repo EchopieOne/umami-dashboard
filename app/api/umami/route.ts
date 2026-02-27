@@ -149,7 +149,7 @@ async function getRevenueCatTransactions(startAt?: number, endAt?: number) {
   return { ...data, items: customersWithSubs };
 }
 
-// Parse transaction details from customers' subscriptions
+// Parse transaction details from customers data
 function parseRevenueCatTransactions(customersData: any) {
   if (!customersData?.items || !Array.isArray(customersData.items)) {
     return [];
@@ -158,8 +158,8 @@ function parseRevenueCatTransactions(customersData: any) {
   const transactions: any[] = [];
   
   customersData.items.forEach((customer: any) => {
-    // Try subscriptions first
-    if (customer.subscriptions?.items) {
+    // Extract from subscriptions if available
+    if (customer.subscriptions?.items && customer.subscriptions.items.length > 0) {
       customer.subscriptions.items.forEach((sub: any) => {
         transactions.push({
           id: sub.id || `${customer.id}_${sub.product_id}`,
@@ -177,29 +177,6 @@ function parseRevenueCatTransactions(customersData: any) {
           expiresAt: sub.expires_at,
           customAttributes: customer.attributes || {},
         });
-      });
-    }
-    
-    // Fallback to entitlements
-    else if (customer.entitlements) {
-      Object.entries(customer.entitlements).forEach(([key, entitlement]: [string, any]) => {
-        if (entitlement?.purchase_date) {
-          transactions.push({
-            id: `${customer.id}_${key}`,
-            type: entitlement.will_renew ? 'RENEWAL' : 'INITIAL_PURCHASE',
-            store: entitlement.store || 'unknown',
-            price: 0,
-            currency: 'USD',
-            productId: key,
-            subscriberId: customer.id,
-            country: customer.last_seen_country,
-            appUserId: customer.id,
-            isTrial: entitlement.is_trial || false,
-            cancellationReason: entitlement.unsubscribe_detected_at ? 'USER_CANCELLED' : undefined,
-            createdAt: entitlement.purchase_date,
-            customAttributes: customer.attributes || {},
-          });
-        }
       });
     }
   });
