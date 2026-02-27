@@ -634,45 +634,52 @@ export default function Dashboard() {
                 </Card>
 
                 {/* 地理分布 */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <Globe className="w-5 h-5" />
-                        国家分布
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {data.breakdown.countries.map((country, index) => (
-                          <div key={country.name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Globe className="w-5 h-5" />
+                      国家分布
+                    </CardTitle>
+                    <CardDescription>用户地理位置分布</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={data.breakdown.countries}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={5}
+                            dataKey="value"
+                            nameKey="name"
+                          >
+                            {data.breakdown.countries.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="mt-4 space-y-2">
+                      {data.breakdown.countries.map((country, index) => (
+                        <div key={country.name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full"
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                            />
                             <span className="font-medium">{country.name}</span>
-                            <span className="text-gray-600">{country.value} 用户</span>
                           </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-lg">
-                        <MapPin className="w-5 h-5" />
-                        城市分布
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {data.breakdown.cities.map((city, index) => (
-                          <div key={city.name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <span className="font-medium">{city.name}</span>
-                            <span className="text-gray-600">{city.value} 用户</span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                          <span className="text-gray-600">{country.value} 用户</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
               </>
             )}
           </TabsContent>
