@@ -8,51 +8,36 @@ const REVENUECAT_BASE_URL = 'https://api.revenuecat.com/v2';
 const REVENUECAT_API_KEY = (process.env.REVENUECAT_API_KEY || '').trim();
 const REVENUECAT_PROJECT_ID = (process.env.REVENUECAT_PROJECT_ID || '').trim();
 
-const CACHE_TTL = 300; // 5分钟
-
-// 内存缓存备用
+const CACHE_TTL = 300;
 const memoryCache = new Map<string, { data: string; expiry: number }>();
 
-// 安全的缓存操作
-async function getCache(key: string): Promise<string | null> {
-  try {
-    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      return await kv.get(key);
-    }
-  } catch (e) {
-    console.log('KV get failed, using memory cache');
-  }
-  // 内存缓存回退
-  const item = memoryCache.get(key);
-  if (item && item.expiry > Date.now()) {
-    return item.data;
-  }
-  return null;
-}
-
-async function setCache(key: string, data: string): Promise<void> {
-  try {
-    if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
-      await kv.set(key, data, { ex: CACHE_TTL });
-      return;
-    }
-  } catch (e) {
-    console.log('KV set failed, using memory cache');
-  }
-  // 内存缓存回退
-  memoryCache.set(key, { data, expiry: Date.now() + CACHE_TTL * 1000 });
-}
-
-// Umami 登录缓存
 let cachedToken: string | null = null;
 let tokenExpiry = 0;
 
-interface EventItem { eventName?: string; createdAt?: number; }
+interface EventItem { eventName?: string; createdAt?: number; [key: string]: any; }
+
+async function getCache(key: string): Promise<string | null> {
+  try {
+    if (process.env.KV_REST_API_URL) return await kv.get(key);
+  } catch {}
+  const item = memoryCache.get(key);
+  if (item && item.expiry > Date.now()) return item.data;
+  return null;
+}
+
+async function setCache(key: string, data: string) {
+  try {
+    if (process.env.KV_REST_API_URL) {
+      await kv.set(key, data, { ex: CACHE_TTL });
+      return;
+    }
+  } catch {}
+  memoryCache.set(key, { data, expiry: Date.now() + CACHE_TTL * 1000 });
+}
 
 async function getToken(): Promise<string> {
   const now = Date.now();
   if (cachedToken && tokenExpiry > now) return cachedToken;
-  
   const res = await fetch(`${UMAMI_URL}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -60,16 +45,13 @@ async function getToken(): Promise<string> {
   });
   const data = await res.json();
   if (!data.token) throw new Error('Login failed');
-  
   cachedToken = data.token;
   tokenExpiry = now + 55 * 60 * 1000;
   return cachedToken as string;
 }
 
-async function getWebsiteId(token: string): Promise<string> {
-  const res = await fetch(`${UMAMI_URL}/api/websites`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+async function getWebsiteId(token: string) {
+  const res = await fetch(`${UMAMI_URL}/api/websites`, { headers: { Authorization: `Bearer ${token}` } });
   const data = await res.json();
   return data.data[0].id;
 }
@@ -77,92 +59,71 @@ async function getWebsiteId(token: string): Promise<string> {
 async function getEvents(startAt: number, endAt: number, eventName?: string) {
   const token = await getToken();
   const websiteId = await getWebsiteId(token);
-  const params = new URLSearchParams({
-    startAt: startAt.toString(),
-    endAt: endAt.toString(),
-    pageSize: '1000',
-  });
+  const params = new URLSearchParams({ startAt: startAt.toString(), endAt: endAt.toString(), pageSize: '1000' });
   if (eventName) params.append('event', eventName);
-  
-  const res = await fetch(
-    `${UMAMI_URL}/api/websites/${websiteId}/events?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  const res = await fetch(`${UMAMI_URL}/api/websites/${websiteId}/events?${params}`, { headers: { Authorization: `Bearer ${token}` } });
   return res.json();
 }
 
 async function getStats(startAt: number, endAt: number) {
   const token = await getToken();
   const websiteId = await getWebsiteId(token);
-  const params = new URLSearchParams({ startAt: startAt.toString(), endAt: endAt.toString() });
-  
-  const res = await fetch(
-    `${UMAMI_URL}/api/websites/${websiteId}/stats?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  const res = await fetch(`${UMAMI_URL}/api/websites/${websiteId}/stats?startAt=${startAt}&endAt=${endAt}`, { headers: { Authorization: `Bearer ${token}` } });
   return res.json();
 }
 
 async function getCountries(startAt: number, endAt: number) {
   const token = await getToken();
   const websiteId = await getWebsiteId(token);
-  const params = new URLSearchParams({
-    startAt: startAt.toString(),
-    endAt: endAt.toString(),
-    type: 'country',
-  });
-  
-  const res = await fetch(
-    `${UMAMI_URL}/api/websites/${websiteId}/metrics?${params}`,
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  const res = await fetch(`${UMAMI_URL}/api/websites/${websiteId}/metrics?startAt=${startAt}&endAt=${endAt}&type=country`, { headers: { Authorization: `Bearer ${token}` } });
   return res.json();
 }
 
 async function getRevenueCatOverview() {
-  if (!REVENUECAT_API_KEY || !REVENUECAT_PROJECT_ID) return null;
-  
-  const res = await fetch(
-    `${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/metrics/overview`,
-    { 
-      headers: { Authorization: `Bearer ${REVENUECAT_API_KEY}` },
-      cache: 'no-store' 
-    }
-  );
-  
+  if (!REVENUECAT_API_KEY) return null;
+  const res = await fetch(`${REVENUECAT_BASE_URL}/projects/${REVENUECAT_PROJECT_ID}/metrics/overview`, { headers: { Authorization: `Bearer ${REVENUECAT_API_KEY}` } });
   if (!res.ok) return null;
   return res.json();
 }
 
-function getMetricValue(metrics: any[], id: string): number {
-  if (!Array.isArray(metrics)) return 0;
-  const metric = metrics.find((m) => m?.id === id);
-  return typeof metric?.value === 'number' ? metric.value : 0;
+function getMetricValue(metrics: any[], id: string) {
+  return metrics?.find((m) => m?.id === id)?.value || 0;
 }
 
-function formatDate(ts: number): string {
+function formatDate(ts: number) {
   return new Date(ts).toISOString().split('T')[0];
 }
 
-function getDailyData(events: EventItem[] | undefined, startAt: number, endAt: number) {
-  if (!Array.isArray(events)) return [];
-  
+function getDailyData(events: any[], startAt: number, endAt: number) {
   const daily: Record<string, number> = {};
-  const start = new Date(startAt);
-  const end = new Date(endAt);
-  
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+  for (let d = new Date(startAt); d <= new Date(endAt); d.setDate(d.getDate() + 1)) {
     daily[formatDate(d.getTime())] = 0;
   }
-  
-  events.forEach((e) => {
+  events?.forEach((e) => {
     if (e?.createdAt) {
       const date = formatDate(e.createdAt);
       if (daily[date] !== undefined) daily[date]++;
     }
   });
-  
   return Object.entries(daily).map(([date, count]) => ({ date, count }));
+}
+
+function analyzeAlarmTypes(events: EventItem[]) {
+  const types: Record<string, number> = { '一次性': 0, '每天': 0, '工作日': 0, '节假日': 0, '规律工作日': 0, '大小周': 0, '规律休息日': 0, '响一次': 0, '自定义': 0 };
+  events?.forEach((e) => {
+    const name = e?.eventName || '';
+    if (name.includes('once')) types['一次性']++;
+    else if (name.includes('everyday')) types['每天']++;
+    else if (name.includes('workday') && !name.includes('regular')) types['工作日']++;
+    else if (name.includes('holiday')) types['节假日']++;
+    else if (name.includes('regular.workday')) types['规律工作日']++;
+    else if (name.includes('big.small') || name.includes('last.saturday')) types['大小周']++;
+    else if (name.includes('regular.weekend') || name.includes('regular.off')) types['规律休息日']++;
+    else if (name.includes('one.time')) types['响一次']++;
+    else if (name.includes('custom')) types['自定义']++;
+  });
+  const total = Object.values(types).reduce((a, b) => a + b, 0);
+  return Object.entries(types).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value, percentage: total > 0 ? Math.round((value / total) * 100) : 0 }));
 }
 
 export async function GET(request: Request) {
@@ -171,14 +132,9 @@ export async function GET(request: Request) {
     const range = searchParams.get('range') || '7';
     const cacheKey = `dashboard:${range}`;
     
-    // 尝试从缓存读取
     const cached = await getCache(cacheKey);
-    if (cached) {
-      console.log('Cache hit for', cacheKey);
-      return NextResponse.json(JSON.parse(cached));
-    }
+    if (cached) return NextResponse.json(JSON.parse(cached));
     
-    // 计算时间范围
     const now = Date.now();
     const days = parseInt(range) || 7;
     const endAt = now;
@@ -186,56 +142,103 @@ export async function GET(request: Request) {
     const prevStartAt = startAt - (endAt - startAt);
     const prevEndAt = startAt;
     
-    // 并行获取数据
     const [
-      appLaunch,
-      newUsers,
-      dailyActive,
-      addAlarm,
-      purchaseSuccess,
-      stats,
-      prevStats,
-      countries,
-      revenueCatOverview,
+      appLaunch, newUsers, dailyActive, vipUsers, annualVip, lifetimeVip,
+      addAlarm, editAlarm, deleteAlarm, alarmTypes,
+      purchaseMain, purchaseSetting, purchaseOnboarding, purchaseSuccess, purchaseFailed, purchaseCancel,
+      clickAnnual, clickLifetime,
+      onboardingAppear, onboardingSkip, onboardingComplete,
+      stats, prevStats, countries, revenueCatOverview,
     ] = await Promise.all([
       getEvents(startAt, endAt, 'app.launch'),
       getEvents(startAt, endAt, 'new.user'),
       getEvents(startAt, endAt, 'user.daily.active'),
+      getEvents(startAt, endAt, 'user.vip'),
+      getEvents(startAt, endAt, 'user.annual.vip'),
+      getEvents(startAt, endAt, 'user.lifetime.vip'),
       getEvents(startAt, endAt, 'alarm.add.click'),
+      getEvents(startAt, endAt, 'alarm.edit'),
+      getEvents(startAt, endAt, 'alarm.swipe.to.delete'),
+      getEvents(startAt, endAt),
+      getEvents(startAt, endAt, 'main.purchase.click'),
+      getEvents(startAt, endAt, 'setting.purchase'),
+      getEvents(startAt, endAt, 'onboarding.purchase.click'),
       getEvents(startAt, endAt, 'setting.purchase.success'),
+      getEvents(startAt, endAt, 'setting.purchase.failed'),
+      getEvents(startAt, endAt, 'setting.purchase.cancel'),
+      getEvents(startAt, endAt, 'setting.purchase.annual.click'),
+      getEvents(startAt, endAt, 'setting.purchase.lifetime.click'),
+      getEvents(startAt, endAt, 'onboarding.appear'),
+      getEvents(startAt, endAt, 'onboarding.skip.click'),
+      getEvents(startAt, endAt, 'onboarding.start.click'),
       getStats(startAt, endAt),
       getStats(prevStartAt, prevEndAt),
       getCountries(startAt, endAt),
       getRevenueCatOverview().catch(() => null),
     ]);
     
-    // 计算指标
-    const visitors = stats.visitors?.value || stats.visitors || 0;
-    const prevVisitors = prevStats.visitors?.value || prevStats.visitors || 0;
-    const activeUsers = dailyActive.data?.length || 0;
-    const newUserCount = newUsers.data?.length || 0;
+    const alarmTypeEvents = alarmTypes.data?.filter((e: EventItem) => e?.eventName?.includes('alarm.add.')) || [];
+    const purchaseClicks = [...(purchaseMain.data || []), ...(purchaseSetting.data || []), ...(purchaseOnboarding.data || [])];
     const prevNewUsers = await getEvents(prevStartAt, prevEndAt, 'new.user');
     
-    const rcMetrics = revenueCatOverview?.metrics || [];
-    const mrr = getMetricValue(rcMetrics, 'mrr');
-    const totalRevenue = getMetricValue(rcMetrics, 'revenue');
+    const visitors = stats.visitors?.value || 0;
+    const prevVisitors = prevStats.visitors?.value || 0;
+    const activeUsers = dailyActive.data?.length || 0;
+    const vipCount = vipUsers.data?.length || 0;
+    const mrr = getMetricValue(revenueCatOverview?.metrics, 'mrr');
+    const totalRevenue = getMetricValue(revenueCatOverview?.metrics, 'revenue');
+    const subs = getMetricValue(revenueCatOverview?.metrics, 'active_subscriptions');
     
     const data = {
       summary: {
         appLaunches: appLaunch.data?.length || 0,
-        newUsers: newUserCount,
-        newUsersChange: prevNewUsers.data?.length ? Math.round(((newUserCount - prevNewUsers.data.length) / prevNewUsers.data.length) * 100) : 0,
+        newUsers: newUsers.data?.length || 0,
+        newUsersChange: prevNewUsers.data?.length ? Math.round(((newUsers.data?.length || 0) - prevNewUsers.data.length) / prevNewUsers.data.length * 100) : 0,
         activeUsers,
         visitors,
         visitorChange: prevVisitors ? Math.round(((visitors - prevVisitors) / prevVisitors) * 100) : 0,
+        vipUsers: vipCount,
+        annualVip: annualVip.data?.length || 0,
+        lifetimeVip: lifetimeVip.data?.length || 0,
         alarmsAdded: addAlarm.data?.length || 0,
+        alarmsEdited: editAlarm.data?.length || 0,
+        alarmsDeleted: deleteAlarm.data?.length || 0,
         purchases: purchaseSuccess.data?.length || 0,
-        pageviews: stats.pageviews?.value || stats.pageviews || 0,
+        pageviews: stats.pageviews?.value || 0,
         mrr,
         totalRevenue,
-        activeSubscriptions: getMetricValue(rcMetrics, 'active_subscriptions'),
-        trials: getMetricValue(rcMetrics, 'active_trials'),
-        churnRate: getMetricValue(rcMetrics, 'churn_rate'),
+        activeSubscriptions: subs,
+        trials: getMetricValue(revenueCatOverview?.metrics, 'active_trials'),
+        churnRate: getMetricValue(revenueCatOverview?.metrics, 'churn_rate'),
+        revenueHealth: {
+          arpu: activeUsers > 0 ? totalRevenue / activeUsers : 0,
+          arppu: vipCount > 0 ? totalRevenue / vipCount : 0,
+          penetrationRate: activeUsers > 0 ? (vipCount / activeUsers) * 100 : 0,
+          ltv: getMetricValue(revenueCatOverview?.metrics, 'churn_rate') > 0 ? (mrr * 12) / (getMetricValue(revenueCatOverview?.metrics, 'churn_rate') / 100) : mrr * 12,
+        },
+        alarmHealth: {
+          avgAlarmsPerUser: activeUsers > 0 ? (addAlarm.data?.length || 0) / activeUsers : 0,
+          editRate: (addAlarm.data?.length || 0) > 0 ? ((editAlarm.data?.length || 0) / addAlarm.data.length) * 100 : 0,
+          deleteRate: (addAlarm.data?.length || 0) > 0 ? ((deleteAlarm.data?.length || 0) / addAlarm.data.length) * 100 : 0,
+        },
+        purchaseSource: [
+          { source: '主页', clicks: purchaseMain.data?.length || 0, conversions: purchaseSuccess.data?.length || 0, conversionRate: (purchaseMain.data?.length || 0) > 0 ? Math.round(((purchaseSuccess.data?.length || 0) / purchaseMain.data.length) * 100) : 0 },
+          { source: '设置页', clicks: purchaseSetting.data?.length || 0, conversions: purchaseSuccess.data?.length || 0, conversionRate: (purchaseSetting.data?.length || 0) > 0 ? Math.round(((purchaseSuccess.data?.length || 0) / purchaseSetting.data.length) * 100) : 0 },
+          { source: 'Onboarding', clicks: purchaseOnboarding.data?.length || 0, conversions: purchaseSuccess.data?.length || 0, conversionRate: 0 },
+        ],
+        purchaseFunnel: {
+          clicks: purchaseClicks.length,
+          success: purchaseSuccess.data?.length || 0,
+          failed: purchaseFailed.data?.length || 0,
+          cancel: purchaseCancel.data?.length || 0,
+          conversionRate: purchaseClicks.length > 0 ? ((purchaseSuccess.data?.length || 0) / purchaseClicks.length * 100).toFixed(1) : '0.0',
+        },
+        onboarding: {
+          appear: onboardingAppear.data?.length || 0,
+          skip: onboardingSkip.data?.length || 0,
+          complete: onboardingComplete.data?.length || 0,
+          completionRate: (onboardingAppear.data?.length || 0) > 0 ? (((onboardingComplete.data?.length || 0) / onboardingAppear.data.length) * 100).toFixed(1) : '0.0',
+        },
       },
       charts: {
         newUsers: getDailyData(newUsers.data || [], startAt, endAt),
@@ -245,30 +248,18 @@ export async function GET(request: Request) {
         purchases: getDailyData(purchaseSuccess.data || [], startAt, endAt),
       },
       breakdown: {
-        countries: (countries || [])
-          .filter((c: any) => c?.x && c?.y)
-          .sort((a: any, b: any) => (b.y || 0) - (a.y || 0))
-          .slice(0, 5)
-          .map((c: any) => ({ name: c.x, value: c.y })),
+        alarmTypes: analyzeAlarmTypes(alarmTypeEvents),
+        purchaseClicks: { annual: clickAnnual.data?.length || 0, lifetime: clickLifetime.data?.length || 0, main: purchaseMain.data?.length || 0, setting: purchaseSetting.data?.length || 0, onboarding: purchaseOnboarding.data?.length || 0 },
+        countries: (countries || []).filter((c: any) => c?.x && c?.y).sort((a: any, b: any) => (b.y || 0) - (a.y || 0)).slice(0, 5).map((c: any) => ({ name: c.x, value: c.y })),
+        transactions: [],
       },
-      range: {
-        startAt,
-        endAt,
-        days,
-        label: `过去 ${days} 天`,
-      },
+      range: { startAt, endAt, days, label: `过去 ${days} 天` },
     };
     
-    // 写入缓存
     await setCache(cacheKey, JSON.stringify(data));
-    console.log('Cache set for', cacheKey);
-    
     return NextResponse.json(data);
   } catch (error) {
     console.error('API Error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to fetch data' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Failed' }, { status: 500 });
   }
 }
