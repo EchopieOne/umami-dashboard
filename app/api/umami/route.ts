@@ -106,7 +106,9 @@ function getMetricValue(metrics: any[], id: string) {
 }
 
 function formatDate(ts: number) {
-  return new Date(ts).toISOString().split('T')[0];
+  // 转换为东八区日期字符串
+  const date = new Date(ts);
+  return date.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
 }
 
 function getDailyData(events: any[], startAt: number, endAt: number) {
@@ -285,9 +287,16 @@ export async function GET(request: Request) {
     // 尝试读取缓存（包括 stale 数据）
     const cached = await getCache(cacheKey);
     
-    // 计算时间范围
+    // 计算时间范围（东八区）
     const now = Date.now();
     let startAt: number, endAt: number, label: string;
+    
+    // 获取东八区当前时间
+    const getShanghaiDate = () => {
+      const date = new Date();
+      const shanghaiTime = date.toLocaleString('en-US', { timeZone: 'Asia/Shanghai' });
+      return new Date(shanghaiTime);
+    };
     
     switch (range) {
       case '24h':
@@ -295,29 +304,35 @@ export async function GET(request: Request) {
         endAt = now;
         label = '过去 24 小时';
         break;
-      case 'today':
-        const today = new Date();
+      case 'today': {
+        const today = getShanghaiDate();
         today.setHours(0, 0, 0, 0);
-        startAt = today.getTime();
+        // 转换为时间戳需要考虑时区偏移
+        startAt = today.getTime() - (today.getTimezoneOffset() + 480) * 60 * 1000; // 480 = 8小时
         endAt = now;
         label = '今天';
         break;
-      case 'week':
-        const weekStart = new Date();
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+      }
+      case 'week': {
+        const weekStart = getShanghaiDate();
+        const day = weekStart.getDay(); // 0=周日
+        const diff = day === 0 ? 6 : day - 1; // 周一为本周开始
+        weekStart.setDate(weekStart.getDate() - diff);
         weekStart.setHours(0, 0, 0, 0);
-        startAt = weekStart.getTime();
+        startAt = weekStart.getTime() - (weekStart.getTimezoneOffset() + 480) * 60 * 1000;
         endAt = now;
         label = '本周';
         break;
-      case 'month':
-        const monthStart = new Date();
+      }
+      case 'month': {
+        const monthStart = getShanghaiDate();
         monthStart.setDate(1);
         monthStart.setHours(0, 0, 0, 0);
-        startAt = monthStart.getTime();
+        startAt = monthStart.getTime() - (monthStart.getTimezoneOffset() + 480) * 60 * 1000;
         endAt = now;
         label = '本月';
         break;
+      }
       default:
         if (customStart && customEnd) {
           startAt = parseInt(customStart);
