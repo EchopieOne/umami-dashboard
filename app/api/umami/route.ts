@@ -136,9 +136,45 @@ export async function GET(request: Request) {
     if (cached) return NextResponse.json(JSON.parse(cached));
     
     const now = Date.now();
-    const days = parseInt(range) || 7;
-    const endAt = now;
-    const startAt = now - days * 24 * 60 * 60 * 1000;
+    let startAt: number, endAt: number, label: string;
+    
+    switch (range) {
+      case '24h':
+        startAt = now - 24 * 60 * 60 * 1000;
+        endAt = now;
+        label = '过去 24 小时';
+        break;
+      case 'today':
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        startAt = today.getTime();
+        endAt = now;
+        label = '今天';
+        break;
+      case 'week':
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+        weekStart.setHours(0, 0, 0, 0);
+        startAt = weekStart.getTime();
+        endAt = now;
+        label = '本周';
+        break;
+      case 'month':
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+        startAt = monthStart.getTime();
+        endAt = now;
+        label = '本月';
+        break;
+      default:
+        const days = parseInt(range) || 7;
+        startAt = now - days * 24 * 60 * 60 * 1000;
+        endAt = now;
+        label = `过去 ${days} 天`;
+    }
+    
+    const days = Math.ceil((endAt - startAt) / (24 * 60 * 60 * 1000));
     const prevStartAt = startAt - (endAt - startAt);
     const prevEndAt = startAt;
     
@@ -253,7 +289,7 @@ export async function GET(request: Request) {
         countries: (countries || []).filter((c: any) => c?.x && c?.y).sort((a: any, b: any) => (b.y || 0) - (a.y || 0)).slice(0, 5).map((c: any) => ({ name: c.x, value: c.y })),
         transactions: [],
       },
-      range: { startAt, endAt, days, label: `过去 ${days} 天` },
+      range: { startAt, endAt, days, label },
     };
     
     await setCache(cacheKey, JSON.stringify(data));

@@ -100,9 +100,13 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <select value={range} onChange={(e) => setRange(e.target.value)} className="px-3 py-2 border rounded-md">
+            <select value={range} onChange={(e) => setRange(e.target.value)} className="px-3 py-2 border rounded-md text-sm">
+              <option value="24h">过去24小时</option>
+              <option value="today">今天</option>
               <option value="7">过去7天</option>
+              <option value="week">本周</option>
               <option value="30">过去30天</option>
+              <option value="month">本月</option>
               <option value="90">过去90天</option>
             </select>
             <Button variant="outline" size="icon" onClick={fetchData}><RefreshCw className="w-4 h-4" /></Button>
