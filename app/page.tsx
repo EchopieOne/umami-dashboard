@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DateRangePicker } from '@/components/date-range-picker';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
@@ -55,12 +56,16 @@ interface DataResponse {
 export default function Dashboard() {
   const [data, setData] = useState<DataResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState('7');
+  const [timeRange, setTimeRange] = useState<{ range: string; startAt?: number; endAt?: number }>({ range: '7' });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/umami?range=${range}`);
+      let url = `/api/umami?range=${timeRange.range}`;
+      if (timeRange.startAt && timeRange.endAt) {
+        url += `&startAt=${timeRange.startAt}&endAt=${timeRange.endAt}`;
+      }
+      const res = await fetch(url);
       if (!res.ok) throw new Error('Failed');
       const json = await res.json();
       setData(json);
@@ -69,7 +74,7 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [timeRange]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -100,15 +105,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <select value={range} onChange={(e) => setRange(e.target.value)} className="px-3 py-2 border rounded-md text-sm">
-              <option value="24h">过去24小时</option>
-              <option value="today">今天</option>
-              <option value="7">过去7天</option>
-              <option value="week">本周</option>
-              <option value="30">过去30天</option>
-              <option value="month">本月</option>
-              <option value="90">过去90天</option>
-            </select>
+            <DateRangePicker value={timeRange} onChange={setTimeRange} />
             <Button variant="outline" size="icon" onClick={fetchData}><RefreshCw className="w-4 h-4" /></Button>
           </div>
         </div>
