@@ -2,15 +2,7 @@
   "crons": [
     {
       "path": "/api/umami?range=7",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/umami?range=30", 
-      "schedule": "*/10 * * * *"
-    },
-    {
-      "path": "/api/umami?range=today",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
